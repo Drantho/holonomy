@@ -56,27 +56,31 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!code || !session || payload?.state.phase === "finished") return;
-    const beat = window.setInterval(() => {
-      void fetch(`/api/rooms/${code}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "heartbeat", token: session.token }),
-      });
-    }, 4000);
-    const leave = () => {
+    // pagehide also fires when a phone switches to another app. That must not
+    // leave the room. A heartbeat holds the seat until the stale window expires.
+    const hold = () => {
       navigator.sendBeacon(
         `/api/rooms/${code}`,
-        new Blob([JSON.stringify({ action: "leave", token: session.token })], {
+        new Blob([JSON.stringify({ action: "heartbeat", token: session.token })], {
           type: "application/json",
         }),
       );
     };
-    window.addEventListener("pagehide", leave);
+    const beat = window.setInterval(hold, 4000);
+    const onVisibility = () => {
+      hold();
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", hold);
+    window.addEventListener("pageshow", onVisibility);
     return () => {
       window.clearInterval(beat);
-      window.removeEventListener("pagehide", leave);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", hold);
+      window.removeEventListener("pageshow", onVisibility);
     };
-  }, [code, session, payload?.state.phase]);
+  }, [code, session, payload?.state.phase, refresh]);
 
   async function post(action: string, extra: Record<string, unknown> = {}) {
     if (!session) return;

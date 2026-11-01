@@ -30,7 +30,9 @@ type MemoryGlobal = typeof globalThis & { __pathRooms?: Map<string, RoomData> };
 const memory = ((globalThis as MemoryGlobal).__pathRooms ??= new Map());
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const STALE_MS = 15_000;
+// A phone stops sending heartbeats while another app is open. Two minutes covers
+// copying the room link into a text without the seat, or an empty lobby, being removed.
+const STALE_MS = 120_000;
 
 function database() {
   const url = process.env.DATABASE_URL;
