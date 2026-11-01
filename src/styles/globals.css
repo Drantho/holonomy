@@ -239,6 +239,15 @@ button:disabled {
   gap: 8px;
 }
 
+.roster li.turn {
+  width: fit-content;
+  justify-self: start;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  padding: 3px 10px 3px 6px;
+  color: var(--text);
+}
+
 .roster .out {
   opacity: 0.55;
 }
@@ -365,11 +374,10 @@ button:disabled {
     gap: 4px 12px;
   }
 
-  .hud-facts .roster {
+  .hud-head .roster {
     display: flex;
     flex-wrap: wrap;
     gap: 4px 10px;
-    width: auto;
   }
 
   .tray {

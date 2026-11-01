@@ -66,6 +66,7 @@ export default function MatchTable({
   const others = namesFor(state, preview, you);
   const link = roomCode && typeof window !== "undefined" ? `${window.location.origin}/r/${roomCode}` : "";
   const showTray = Boolean(youSeat?.alive && state.phase === "playing");
+  const title = titleFor(state);
 
   return (
     <div className={showTray ? "table has-tray" : "table"}>
@@ -80,8 +81,20 @@ export default function MatchTable({
       <header className="glass hud">
         <div className="hud-head">
           <div>
-            <p className="eyebrow">{state.mode === "practice" ? "Practice" : "Live room"}</p>
-            <h1>{titleFor(state)}</h1>
+            {title && <h1>{title}</h1>}
+            <ul className="roster">
+              {state.seats.map((seat) => {
+                const acting =
+                  seat.alive && seat.id === state.activeSeat && state.phase !== "lobby" && state.phase !== "finished";
+                return (
+                  <li key={seat.id} className={seat.alive ? (acting ? "turn" : "") : "out"}>
+                    <i style={{ background: colorHex(seat.color) }} />
+                    <span>{seat.name}</span>
+                    {!seat.alive ? <em>out</em> : null}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
           {onLeave && (
             <button type="button" className="text-button" onClick={onLeave}>
@@ -104,18 +117,6 @@ export default function MatchTable({
           </p>
         )}
         <div className="hud-facts">
-          <ul className="roster">
-            {state.seats.map((seat) => (
-              <li key={seat.id} className={seat.alive ? "" : "out"}>
-                <i style={{ background: colorHex(seat.color) }} />
-                <span>{seat.name}</span>
-                {seat.id === state.activeSeat && state.phase !== "lobby" && state.phase !== "finished" ? (
-                  <em>turn</em>
-                ) : null}
-                {!seat.alive ? <em>out</em> : null}
-              </li>
-            ))}
-          </ul>
           <p className="meta">{cubeLabel(asBoardSize(state.size))}</p>
           {state.phase === "playing" && <p className="meta">Pile {state.pileCount}</p>}
         </div>
@@ -155,7 +156,6 @@ export default function MatchTable({
             ))}
           </div>
           {yourTurn && others && <p className="meta">{others}</p>}
-          {!yourTurn && <p className="meta">Not your turn. You can study your pieces. The board will not preview them.</p>}
           <button
             type="button"
             className={yourTurn && preview?.youLose ? "lock lose" : "lock"}
@@ -186,8 +186,7 @@ function titleFor(state: PublicState) {
   if (state.phase === "lobby") return "Choose colors";
   if (state.phase === "starts") return "Claim a start";
   if (state.phase === "finished") return "Match over";
-  const active = state.seats.find((seat) => seat.id === state.activeSeat);
-  return active ? `${active.name}'s turn` : "In play";
+  return "";
 }
 
 function resultTitle(state: PublicState) {

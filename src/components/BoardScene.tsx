@@ -329,7 +329,7 @@ function BoardContents({
             <PieceModel
               partner={placed.partner}
               rotation={placed.rotation}
-              pathOpacity={preview && !previewCells.has(key) ? 0.2 : 0.5}
+              pathOpacity={preview && !previewCells.has(key) ? 0.3 * 0.4 : 0.3}
               cubeOpacity={preview && !previewCells.has(key) ? 0.5 : 0.95}
             />
           </group>
