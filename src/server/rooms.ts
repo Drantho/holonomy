@@ -17,6 +17,7 @@ export type RoomData = {
   match: Match;
   tokens: Record<string, string>;
   heartbeats: Record<string, number>;
+  revision?: number;
 };
 
 export type RoomView = {
@@ -30,9 +31,9 @@ type MemoryGlobal = typeof globalThis & { __pathRooms?: Map<string, RoomData> };
 const memory = ((globalThis as MemoryGlobal).__pathRooms ??= new Map());
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-// A phone stops sending heartbeats while another app is open. Two minutes covers
-// copying the room link into a text without the seat, or an empty lobby, being removed.
-const STALE_MS = 120_000;
+// Heartbeats stop while a phone is in another app. Ten minutes is long enough to
+// send the room link, or step away mid-game, without the seat being removed.
+const STALE_MS = 10 * 60 * 1000;
 
 function database() {
   const url = process.env.DATABASE_URL;
@@ -90,28 +91,34 @@ async function read(code: string): Promise<RoomData | null> {
   const sql = database();
   if (!sql) return memory.get(code) ?? null;
   await ensureSchema();
-  const rows = await sql`SELECT data FROM path_rooms WHERE code = ${code}`;
-  const row = rows[0] as { data: RoomData } | undefined;
-  return row?.data ?? null;
+  const rows = await sql`SELECT version, data FROM path_rooms WHERE code = ${code}`;
+  const row = rows[0] as { version: number; data: RoomData } | undefined;
+  if (!row) return null;
+  row.data.revision = Number(row.version);
+  return row.data;
 }
 
 async function write(code: string, data: RoomData, expected: number | null): Promise<boolean> {
   const sql = database();
+  const nextRevision = expected === null ? 1 : expected + 1;
   if (!sql) {
     const current = memory.get(code);
-    if (expected !== null && current && current.match.public.version !== expected) return false;
+    const held = current?.revision ?? current?.match.public.version;
+    if (expected !== null && current && held !== expected) return false;
+    data.revision = nextRevision;
     memory.set(code, data);
     return true;
   }
+  data.revision = nextRevision;
   await ensureSchema();
   const payload = JSON.stringify(data);
   if (expected === null) {
     await sql`INSERT INTO path_rooms (code, version, data)
-      VALUES (${code}, ${data.match.public.version}, ${payload}::jsonb)`;
+      VALUES (${code}, ${nextRevision}, ${payload}::jsonb)`;
     return true;
   }
   const rows = await sql`UPDATE path_rooms
-    SET version = ${data.match.public.version}, data = ${payload}::jsonb
+    SET version = ${nextRevision}, data = ${payload}::jsonb
     WHERE code = ${code} AND version = ${expected}
     RETURNING code`;
   return rows.length > 0;
@@ -125,6 +132,10 @@ async function remove(code: string) {
   }
   await ensureSchema();
   await sql`DELETE FROM path_rooms WHERE code = ${code}`;
+}
+
+export function roomHeartbeats(code: string): Record<string, number> | null {
+  return memory.get(code.trim().toUpperCase())?.heartbeats ?? null;
 }
 
 function makeCode(): string {
@@ -141,9 +152,11 @@ function makeToken(): string {
 
 export async function readRoom(code: string, token?: string | null) {
   const normalized = code.trim().toUpperCase();
+  let latest: RoomData | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const found = await read(normalized);
     if (!found) return null;
+    latest = found;
     const swept = sweep(found);
     if (swept.empty) {
       await remove(normalized);
@@ -152,10 +165,10 @@ export async function readRoom(code: string, token?: string | null) {
     if (swept.data.match.public.version === found.match.public.version) {
       return viewRoom(swept.data, token);
     }
-    const saved = await write(normalized, swept.data, found.match.public.version);
+    const saved = await write(normalized, swept.data, found.revision ?? found.match.public.version);
     if (saved) return viewRoom(swept.data, token);
   }
-  return null;
+  return latest ? viewRoom(latest, token) : null;
 }
 
 async function commit(
@@ -165,7 +178,7 @@ async function commit(
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const found = await read(code);
     if (!found) return { error: "That room does not exist." };
-    const before = found.match.public.version;
+    const before = found.revision ?? found.match.public.version;
     const result = change(structuredClone(found));
     if ("error" in result) return { error: result.error, view: viewRoom(found) };
     if (result.empty) {
@@ -282,6 +295,7 @@ export async function act(
       return { data };
     }
     if (action === "leave") {
+      if (body.confirm !== true) return { error: "Use Leave to exit the room." };
       const left = eliminateSeat(data.match, seatId);
       if (!left.ok) return { error: left.error };
       data.match = left.match;

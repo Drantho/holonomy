@@ -1,6 +1,6 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { clearSession, loadSession, saveSession, type SeatSession } from "@/client/session";
 import MatchTable from "@/components/MatchTable";
 import { COLORS, type Piece, type PublicState, type Stance } from "@/game";
@@ -24,6 +24,7 @@ export default function RoomPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const misses = useRef(0);
 
   useEffect(() => {
     if (!code) return;
@@ -33,18 +34,26 @@ export default function RoomPage() {
 
   const refresh = useCallback(async () => {
     if (!code) return;
-    const current = loadSession(code);
-    const response = await fetch(`/api/rooms/${code}`, {
-      headers: current ? { Authorization: `Bearer ${current.token}` } : undefined,
-    });
-    const body = (await response.json()) as RoomPayload;
-    if (!response.ok) {
-      setError(body.error ?? "That room does not exist.");
-      setPayload(null);
-      return;
+    try {
+      const current = loadSession(code);
+      const response = await fetch(`/api/rooms/${code}`, {
+        headers: current ? { Authorization: `Bearer ${current.token}` } : undefined,
+      });
+      const body = (await response.json()) as RoomPayload;
+      if (!response.ok) {
+        misses.current += 1;
+        if (misses.current >= 5) {
+          setError(body.error ?? "That room does not exist.");
+          setPayload(null);
+        }
+        return;
+      }
+      misses.current = 0;
+      setPayload(body);
+      setError("");
+    } catch {
+      misses.current += 1;
     }
-    setPayload(body);
-    setError("");
   }, [code]);
 
   useEffect(() => {
@@ -59,12 +68,18 @@ export default function RoomPage() {
     // pagehide also fires when a phone switches to another app. That must not
     // leave the room. A heartbeat holds the seat until the stale window expires.
     const hold = () => {
-      navigator.sendBeacon(
-        `/api/rooms/${code}`,
-        new Blob([JSON.stringify({ action: "heartbeat", token: session.token })], {
-          type: "application/json",
-        }),
-      );
+      const body = JSON.stringify({ action: "heartbeat", token: session.token });
+      try {
+        navigator.sendBeacon(`/api/rooms/${code}`, new Blob([body], { type: "application/json" }));
+      } catch {
+        // A beacon can throw when the page is already being discarded.
+      }
+      void fetch(`/api/rooms/${code}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      }).catch(() => undefined);
     };
     const beat = window.setInterval(hold, 4000);
     const onVisibility = () => {
@@ -83,7 +98,7 @@ export default function RoomPage() {
   }, [code, session, payload?.state.phase, refresh]);
 
   async function post(action: string, extra: Record<string, unknown> = {}) {
-    if (!session) return;
+    if (!session) return false;
     setBusy(true);
     const response = await fetch(`/api/rooms/${code}`, {
       method: "POST",
@@ -93,8 +108,12 @@ export default function RoomPage() {
     const body = (await response.json()) as RoomPayload;
     setBusy(false);
     if (body.state) setPayload(body);
-    if (!response.ok) setError(body.error ?? "That move was rejected.");
-    else setError("");
+    if (!response.ok) {
+      setError(body.error ?? "That move was rejected.");
+      return false;
+    }
+    setError("");
+    return true;
   }
 
   async function join(event: FormEvent) {
@@ -143,7 +162,8 @@ export default function RoomPage() {
           onLeave={
             seated
               ? () => {
-                  void post("leave").then(() => {
+                  void post("leave", { confirm: true }).then((left) => {
+                    if (!left) return;
                     clearSession(code);
                     setSession(null);
                     void router.push("/");
