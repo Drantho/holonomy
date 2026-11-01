@@ -1,0 +1,297 @@
+:root {
+  --bg: #07080c;
+  --text: #e7eef4;
+  --muted: #9aa6b4;
+  --line: rgba(255, 255, 255, 0.16);
+  --glass: rgba(16, 20, 28, 0.62);
+  --danger: #ff5d6c;
+  --accent: #d7e4f2;
+}
+
+html,
+body,
+#__next,
+.app-root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-root {
+  min-height: 100vh;
+  font-family: var(--font-geist), sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.menu-screen,
+.table {
+  min-height: 100vh;
+}
+
+.menu-screen {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.menu-card {
+  width: min(440px, 100%);
+  padding: 28px;
+  display: grid;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 500;
+}
+
+.menu-card h1 {
+  font-size: 40px;
+}
+
+.lede,
+.meta,
+.roster,
+.code-row {
+  color: var(--muted);
+}
+
+.lede {
+  margin: 0;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+input {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.actions,
+.swatches,
+.turns,
+.pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions button,
+.lock,
+.swatches button,
+.piece,
+.turns button {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 10px 16px;
+}
+
+.lock,
+.actions button.primary {
+  background: var(--accent);
+  color: #10141b;
+  border-color: transparent;
+}
+
+.lock:disabled,
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.swatches button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatches i,
+.roster i {
+  width: 12px;
+  height: 12px;
+  border-radius: 99px;
+  display: inline-block;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.swatches button.on,
+.piece.on {
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.board-canvas {
+  position: fixed !important;
+  inset: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+.board-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 16px 18px;
+  display: grid;
+  gap: 10px;
+  z-index: 2;
+}
+
+.roster {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.roster li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roster .out {
+  opacity: 0.55;
+}
+
+.roster em,
+.code-row span {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.code-row span {
+  margin: 0;
+  letter-spacing: 0.18em;
+  color: var(--text);
+}
+
+.text-button,
+.result a {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  width: fit-content;
+}
+
+.tray {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 32px));
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  z-index: 2;
+}
+
+.piece {
+  display: grid;
+  text-align: left;
+  border-radius: 16px;
+  min-width: 120px;
+}
+
+.piece span,
+.meta,
+.warn {
+  font-size: 14px;
+}
+
+.warn {
+  margin: 0;
+  color: var(--danger);
+}
+
+.meta {
+  margin: 0;
+}
+
+.result {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 28px;
+  display: grid;
+  gap: 12px;
+  z-index: 3;
+  text-align: center;
+}
+
+.lobby-card {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  z-index: 3;
+}
+
+.spectator {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  margin: 0;
+  padding: 10px 14px;
+  z-index: 2;
+  color: var(--muted);
+}
