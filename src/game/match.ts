@@ -283,6 +283,10 @@ export function startLive(match: Match, seatId: number, seed: number): RuleMatch
   if (match.public.seats.some((entry) => !entry.color)) {
     return fail("Every player needs a color first.");
   }
+  const chosen = match.public.seats.map((entry) => entry.color);
+  if (new Set(chosen).size !== chosen.length) {
+    return fail("Each player needs a different color.");
+  }
   const next = clone(match);
   next.undealt = makeDeck(deckSize(next.public.size), mulberry32(seed));
   next.public.phase = "starts";

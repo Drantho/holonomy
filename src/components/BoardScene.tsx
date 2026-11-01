@@ -89,6 +89,8 @@ function Tube({
           emissive={color}
           emissiveIntensity={2.4}
           toneMapped={false}
+          transparent
+          opacity={opacity}
         />
       </mesh>
     );
@@ -149,6 +151,44 @@ function pathEnd(seat: { stance: Stance | null; trail: Segment[] }, size: number
   if (!end) return null;
   const origin = cellCenter(last.cell, size);
   return [origin[0] + end[0], origin[1] + end[1], origin[2] + end[2]];
+}
+
+function distance(a: Vec3, b: Vec3) {
+  return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+}
+
+function dashPolylines(points: Vec3[], dash = 0.1, gap = 0.07): Vec3[][] {
+  const dashes: Vec3[][] = [];
+  if (points.length < 2) return dashes;
+  let drawing = true;
+  let budget = dash;
+  let cursor = points[0];
+  let active: Vec3[] = [cursor];
+  for (let index = 1; index < points.length; index += 1) {
+    const target = points[index];
+    let left = distance(cursor, target);
+    while (left > 1e-5) {
+      const span = distance(cursor, target);
+      const step = Math.min(left, budget);
+      const next: Vec3 = [
+        cursor[0] + ((target[0] - cursor[0]) * step) / span,
+        cursor[1] + ((target[1] - cursor[1]) * step) / span,
+        cursor[2] + ((target[2] - cursor[2]) * step) / span,
+      ];
+      if (drawing) active.push(next);
+      cursor = next;
+      left -= step;
+      budget -= step;
+      if (budget <= 1e-5) {
+        if (drawing && active.length > 1) dashes.push(active);
+        drawing = !drawing;
+        budget = drawing ? dash : gap;
+        active = drawing ? [cursor] : [];
+      }
+    }
+  }
+  if (drawing && active.length > 1) dashes.push(active);
+  return dashes;
 }
 
 function worldPoints(segment: Segment, size: number): Vec3[] {
@@ -323,6 +363,7 @@ function BoardContents({
             color={colorHex(seat.color)}
             radius={0.032}
             glow
+            opacity={0.9}
           />
         )),
       )}
@@ -359,13 +400,18 @@ function BoardContents({
       )}
       {preview?.travelers.flatMap((traveler) => {
         const seat = state.seats.find((entry) => entry.id === traveler.seatId);
-        return traveler.segments.map((segment, index) => (
+        const points = traveler.segments.flatMap((segment, index) => {
+          const world = worldPoints(segment, size);
+          return index === 0 ? world : world.slice(1);
+        });
+        return dashPolylines(points).map((dash, index) => (
           <Tube
             key={`preview-${traveler.seatId}-${index}`}
-            points={worldPoints(segment, size)}
+            points={dash}
             color={colorHex(seat?.color ?? null)}
-            radius={0.04}
+            radius={0.028}
             glow
+            opacity={0.9}
           />
         ));
       })}

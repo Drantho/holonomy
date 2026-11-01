@@ -172,6 +172,7 @@ export default function RoomPage() {
           state={state}
           you={payload?.you ?? null}
           busy={busy}
+          notice={error}
           onColor={(color) => void post("color", { color })}
           onStart={() => void post("start")}
         />
@@ -187,12 +188,14 @@ function LobbyPanel({
   state,
   you,
   busy,
+  notice,
   onColor,
   onStart,
 }: {
   state: PublicState;
   you: number | null;
   busy: boolean;
+  notice: string;
   onColor: (color: string) => void;
   onStart: () => void;
 }) {
@@ -203,29 +206,37 @@ function LobbyPanel({
     <section className="glass lobby-card">
       <p className="eyebrow">Lobby</p>
       <h2>Pick a glow</h2>
+      <p className="meta">Each player picks a different color.</p>
       <div className="swatches">
         {COLORS.map((color) => {
-          const taken = state.seats.some((seat) => seat.color === color.id && seat.id !== you);
+          const holder = state.seats.find((seat) => seat.color === color.id && seat.id !== you);
           return (
             <button
               key={color.id}
               type="button"
-              className={mine?.color === color.id ? "on" : ""}
-              disabled={taken || busy}
+              className={holder ? "taken" : mine?.color === color.id ? "on" : ""}
+              disabled={Boolean(holder) || busy}
+              aria-label={holder ? `${color.label}, taken by ${holder.name}` : color.label}
               onClick={() => onColor(color.id)}
             >
               <i style={{ background: color.hex, color: color.hex }} />
-              {color.label}
+              {holder ? holder.name : color.label}
             </button>
           );
         })}
       </div>
+      {notice && <p className="error">{notice}</p>}
       {host ? (
-        <button type="button" className="primary" disabled={!ready || busy} onClick={onStart}>
-          Start match
-        </button>
+        <>
+          {!ready && <p className="meta">Every player needs a different color before the match can start.</p>}
+          <button type="button" className="primary" disabled={!ready || busy} onClick={onStart}>
+            Start match
+          </button>
+        </>
       ) : (
-        <p className="meta">Waiting for the host to start.</p>
+        <p className="meta">
+          {ready ? "Waiting for the host to start." : "Waiting for every player to pick a different color."}
+        </p>
       )}
     </section>
   );

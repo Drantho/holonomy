@@ -323,6 +323,9 @@ describe("match results", () => {
     const bea = setColor(ada.match, 1, "amber");
     expect(bea.ok).toBe(true);
     if (!bea.ok) return;
+    bea.match.public.seats[1].color = "cyan";
+    expect(startLive(bea.match, 0, 3).ok).toBe(false);
+    bea.match.public.seats[1].color = "amber";
     const started = startLive(bea.match, 0, 3);
     expect(started.ok).toBe(true);
     expect(colorHex("amber")).toBe("#ffc14a");

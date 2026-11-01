@@ -160,6 +160,15 @@ button:disabled {
   border-color: rgba(255, 255, 255, 0.7);
 }
 
+.swatches button.taken {
+  opacity: 0.55;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+}
+
 .board-canvas {
   position: fixed !important;
   inset: 0;
