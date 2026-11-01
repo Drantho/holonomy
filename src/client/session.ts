@@ -3,8 +3,20 @@ export type SeatSession = {
   seatId: number;
 };
 
+type LiveLock = {
+  tab: string;
+  at: number;
+  hidden: boolean;
+};
+
+const LIVE_MS = 15_000;
+
 function key(code: string) {
   return `pathcube:${code}`;
+}
+
+function liveKey(code: string) {
+  return `pathcube:${code}:live`;
 }
 
 function parse(raw: string | null): SeatSession | null {
@@ -18,25 +30,66 @@ function parse(raw: string | null): SeatSession | null {
   }
 }
 
+function tabId(): string {
+  const existing = sessionStorage.getItem("pathcube:tab");
+  if (existing) return existing;
+  const created = crypto.randomUUID();
+  sessionStorage.setItem("pathcube:tab", created);
+  return created;
+}
+
+function readLock(code: string): LiveLock | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(liveKey(code)) ?? "") as LiveLock;
+    if (!parsed || typeof parsed.tab !== "string" || typeof parsed.at !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// Another visible tab already holds this browser's saved seat.
+function otherTabIsHere(code: string): boolean {
+  const live = readLock(code);
+  if (!live || live.tab === tabId() || live.hidden) return false;
+  return Date.now() - live.at <= LIVE_MS;
+}
+
+function hiddenNow() {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
 export function loadSession(code: string): SeatSession | null {
   if (typeof window === "undefined") return null;
   const tab = parse(sessionStorage.getItem(key(code)));
   if (tab) return tab;
-  // iOS drops sessionStorage when the browser is sent to the background.
-  // The same phone still has the seat in localStorage.
+  // iOS can drop sessionStorage when the browser is backgrounded. Restore the
+  // seat only when no other visible tab is already playing it.
+  if (otherTabIsHere(code)) return null;
   const saved = parse(localStorage.getItem(key(code)));
   if (!saved) return null;
   sessionStorage.setItem(key(code), JSON.stringify(saved));
+  holdSession(code);
   return saved;
 }
 
 export function saveSession(code: string, session: SeatSession) {
-  const raw = JSON.stringify(session);
-  sessionStorage.setItem(key(code), raw);
-  localStorage.setItem(key(code), raw);
+  sessionStorage.setItem(key(code), JSON.stringify(session));
+  holdSession(code);
+}
+
+export function holdSession(code: string) {
+  if (typeof window === "undefined") return;
+  const mine = parse(sessionStorage.getItem(key(code)));
+  if (!mine || otherTabIsHere(code)) return;
+  localStorage.setItem(key(code), JSON.stringify(mine));
+  const lock: LiveLock = { tab: tabId(), at: Date.now(), hidden: hiddenNow() };
+  localStorage.setItem(liveKey(code), JSON.stringify(lock));
 }
 
 export function clearSession(code: string) {
   sessionStorage.removeItem(key(code));
+  if (otherTabIsHere(code)) return;
   localStorage.removeItem(key(code));
+  localStorage.removeItem(liveKey(code));
 }

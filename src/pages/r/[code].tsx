@@ -1,7 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { clearSession, loadSession, saveSession, type SeatSession } from "@/client/session";
+import { clearSession, holdSession, loadSession, saveSession, type SeatSession } from "@/client/session";
 import MatchTable from "@/components/MatchTable";
 import { COLORS, type Piece, type PublicState, type Stance } from "@/game";
 
@@ -14,6 +14,15 @@ type RoomPayload = {
   seatId?: number;
   code?: string;
 };
+
+function keepNewer(current: RoomPayload | null, body: RoomPayload): RoomPayload {
+  if (!current) return body;
+  if (body.state.version < current.state.version) return current;
+  // A refresh that left before this seat was saved can answer with the same
+  // board and no player. Keep the seat that just joined.
+  if (current.you != null && body.you == null && body.state.version === current.state.version) return current;
+  return body;
+}
 
 export default function RoomPage() {
   const router = useRouter();
@@ -52,10 +61,7 @@ export default function RoomPage() {
       }
       misses.current = 0;
       held.current = true;
-      setPayload((current) => {
-        if (current && body.state.version < current.state.version) return current;
-        return body;
-      });
+      setPayload((current) => keepNewer(current, body));
       setError("");
     } catch {
       misses.current += 1;
@@ -74,6 +80,7 @@ export default function RoomPage() {
     // pagehide also fires when a phone switches to another app. That must not
     // leave the room. A heartbeat holds the seat until the stale window expires.
     const hold = () => {
+      holdSession(code);
       const body = JSON.stringify({ action: "heartbeat", token: session.token });
       try {
         navigator.sendBeacon(`/api/rooms/${code}`, new Blob([body], { type: "application/json" }));
@@ -121,10 +128,7 @@ export default function RoomPage() {
       }
       if (body.state) {
         held.current = true;
-        setPayload((current) => {
-          if (current && body.state.version < current.state.version) return current;
-          return body;
-        });
+        setPayload((current) => keepNewer(current, body));
       }
       if (!response.ok) {
         setError(body.error ?? "That move was rejected.");
