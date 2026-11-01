@@ -1,5 +1,6 @@
 import {
   asBoardSize,
+  isBoardSize,
   cellKey,
   internalLink,
   isOuterStance,
@@ -161,7 +162,7 @@ function validColor(color: string): color is ColorId {
 export function createLobby(hostName: string, size: number = 6): RuleMatch | RuleFail {
   const name = validName(hostName);
   if (!name) return fail("Enter a name up to 16 characters.");
-  if (size !== 4 && size !== 5 && size !== 6) return fail("Pick a 4×4×4, 5×5×5, or 6×6×6 cube.");
+  if (!isBoardSize(size)) return fail("Pick a 3×3×3, 4×4×4, 5×5×5, or 6×6×6 cube.");
   const match: Match = {
     public: {
       mode: "live",
@@ -203,7 +204,7 @@ export function createPractice(
   const name = validName(playerName);
   if (!name) return fail("Enter a name up to 16 characters.");
   if (!validColor(color)) return fail("Pick a color.");
-  if (size !== 4 && size !== 5 && size !== 6) return fail("Pick a 4×4×4, 5×5×5, or 6×6×6 cube.");
+  if (!isBoardSize(size)) return fail("Pick a 3×3×3, 4×4×4, 5×5×5, or 6×6×6 cube.");
   const match: Match = {
     public: {
       mode: "practice",

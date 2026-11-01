@@ -1,9 +1,13 @@
-export const BOARD_SIZES = [4, 5, 6] as const;
+export const BOARD_SIZES = [3, 4, 5, 6] as const;
 export type BoardSize = (typeof BOARD_SIZES)[number];
 export const BOARD_SIZE: BoardSize = 6;
 
+export function isBoardSize(size: number | undefined): size is BoardSize {
+  return size !== undefined && (BOARD_SIZES as readonly number[]).includes(size);
+}
+
 export function asBoardSize(size: number | undefined): BoardSize {
-  return size === 4 || size === 5 || size === 6 ? size : BOARD_SIZE;
+  return isBoardSize(size) ? size : BOARD_SIZE;
 }
 export const PORTS_PER_FACE = 4;
 export const PORT_COUNT = 24;

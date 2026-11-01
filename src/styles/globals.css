@@ -154,6 +154,16 @@ button:disabled {
   box-shadow: 0 0 10px currentColor;
 }
 
+.sizes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sizes button {
+  padding: 10px 4px;
+  text-align: center;
+}
+
 .swatches button.on,
 .sizes button.on,
 .piece.on {

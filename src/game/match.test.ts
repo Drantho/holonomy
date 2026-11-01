@@ -196,6 +196,11 @@ describe("match results", () => {
     if (!created.ok) return;
     expect(created.match.public.size).toBe(5);
     expect(created.match.undealt).toHaveLength(125);
+    const small = createPractice("Ada", "cyan", 7, 3);
+    expect(small.ok).toBe(true);
+    if (!small.ok) return;
+    expect(small.match.public.size).toBe(3);
+    expect(small.match.undealt).toHaveLength(27);
     expect(createPractice("Ada", "cyan", 7, 2).ok).toBe(false);
   });
 
@@ -348,8 +353,10 @@ describe("match results", () => {
     expect(started.match.undealt).toHaveLength(64);
   });
 
-  it("refuses a cube that is not 4, 5, or 6 on a side", () => {
+  it("refuses a cube that is not an offered size", () => {
     expect(createLobby("Ada", 7).ok).toBe(false);
+    expect(createLobby("Ada", 2).ok).toBe(false);
+    expect(createLobby("Ada", 3).ok).toBe(true);
     expect(createLobby("Ada", 6).ok).toBe(true);
   });
 
