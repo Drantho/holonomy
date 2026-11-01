@@ -154,14 +154,11 @@ export default function MatchTable({
               </button>
             ))}
           </div>
-          {yourTurn && preview?.youLose && (
-            <p className="warn">This placement eliminates you. You can still lock it in.</p>
-          )}
           {yourTurn && others && <p className="meta">{others}</p>}
           {!yourTurn && <p className="meta">Not your turn. You can study your pieces. The board will not preview them.</p>}
           <button
             type="button"
-            className="lock"
+            className={yourTurn && preview?.youLose ? "lock lose" : "lock"}
             disabled={!yourTurn || !preview || busy}
             onClick={() => {
               if (selected && preview) onLockIn(selected.id, rotation);

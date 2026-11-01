@@ -133,6 +133,11 @@ input {
   border-color: transparent;
 }
 
+.lock.lose {
+  background: var(--danger);
+  color: #fff;
+}
+
 .lock:disabled,
 button:disabled {
   opacity: 0.45;
@@ -296,14 +301,8 @@ button:disabled {
 }
 
 .piece span,
-.meta,
-.warn {
+.meta {
   font-size: 14px;
-}
-
-.warn {
-  margin: 0;
-  color: var(--danger);
 }
 
 .meta {

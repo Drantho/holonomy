@@ -112,11 +112,13 @@ function PieceModel({
   rotation,
   ghost = false,
   pathOpacity = 1,
+  cubeOpacity = 0.95,
 }: {
   partner: number[];
   rotation: number;
   ghost?: boolean;
   pathOpacity?: number;
+  cubeOpacity?: number;
 }) {
   const quaternion = useMemo(() => quaternionFor(rotation), [rotation]);
   const curves = useMemo(() => pairCurves(partner), [partner]);
@@ -128,7 +130,11 @@ function PieceModel({
   return (
     <group quaternion={quaternion}>
       <lineSegments geometry={edges}>
-        <lineBasicMaterial color={ghost ? "#f7fbff" : "#d5dbe3"} transparent opacity={ghost ? 0.55 : 0.95} />
+        <lineBasicMaterial
+          color={ghost ? "#f7fbff" : "#d5dbe3"}
+          transparent
+          opacity={ghost ? 0.55 : cubeOpacity}
+        />
       </lineSegments>
       {curves.map((points, index) => (
         <Tube
@@ -151,44 +157,6 @@ function pathEnd(seat: { stance: Stance | null; trail: Segment[] }, size: number
   if (!end) return null;
   const origin = cellCenter(last.cell, size);
   return [origin[0] + end[0], origin[1] + end[1], origin[2] + end[2]];
-}
-
-function distance(a: Vec3, b: Vec3) {
-  return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-}
-
-function dashPolylines(points: Vec3[], dash = 0.1, gap = 0.07): Vec3[][] {
-  const dashes: Vec3[][] = [];
-  if (points.length < 2) return dashes;
-  let drawing = true;
-  let budget = dash;
-  let cursor = points[0];
-  let active: Vec3[] = [cursor];
-  for (let index = 1; index < points.length; index += 1) {
-    const target = points[index];
-    let left = distance(cursor, target);
-    while (left > 1e-5) {
-      const span = distance(cursor, target);
-      const step = Math.min(left, budget);
-      const next: Vec3 = [
-        cursor[0] + ((target[0] - cursor[0]) * step) / span,
-        cursor[1] + ((target[1] - cursor[1]) * step) / span,
-        cursor[2] + ((target[2] - cursor[2]) * step) / span,
-      ];
-      if (drawing) active.push(next);
-      cursor = next;
-      left -= step;
-      budget -= step;
-      if (budget <= 1e-5) {
-        if (drawing && active.length > 1) dashes.push(active);
-        drawing = !drawing;
-        budget = drawing ? dash : gap;
-        active = drawing ? [cursor] : [];
-      }
-    }
-  }
-  if (drawing && active.length > 1) dashes.push(active);
-  return dashes;
 }
 
 function worldPoints(segment: Segment, size: number): Vec3[] {
@@ -338,6 +306,13 @@ function BoardContents({
   const yourTurn = state.phase === "playing" && state.activeSeat === you && Boolean(youSeat?.alive);
   const faced = yourTurn ? youSeat?.stance : null;
   const size = asBoardSize(state.size);
+  const previewCells = new Set<string>();
+  if (preview) {
+    previewCells.add(cellKey(preview.cell));
+    for (const traveler of preview.travelers) {
+      for (const segment of traveler.segments) previewCells.add(cellKey(segment.cell));
+    }
+  }
 
   return (
     <>
@@ -351,7 +326,12 @@ function BoardContents({
         const center = cellCenter([x, y, z], size);
         return (
           <group key={key} position={center}>
-            <PieceModel partner={placed.partner} rotation={placed.rotation} pathOpacity={0.5} />
+            <PieceModel
+              partner={placed.partner}
+              rotation={placed.rotation}
+              pathOpacity={preview && !previewCells.has(key) ? 0.2 : 0.5}
+              cubeOpacity={preview && !previewCells.has(key) ? 0.5 : 0.95}
+            />
           </group>
         );
       })}
@@ -363,7 +343,7 @@ function BoardContents({
             color={colorHex(seat.color)}
             radius={0.032}
             glow
-            opacity={0.9}
+            opacity={preview && !previewCells.has(cellKey(segment.cell)) ? 0.9 * 0.2 : 0.9}
           />
         )),
       )}
@@ -398,22 +378,23 @@ function BoardContents({
           <PieceModel partner={selected.partner} rotation={rotation} />
         </group>
       )}
-      {preview?.travelers.flatMap((traveler) => {
+      {preview?.travelers.map((traveler) => {
         const seat = state.seats.find((entry) => entry.id === traveler.seatId);
         const points = traveler.segments.flatMap((segment, index) => {
           const world = worldPoints(segment, size);
           return index === 0 ? world : world.slice(1);
         });
-        return dashPolylines(points).map((dash, index) => (
+        if (points.length < 2) return null;
+        return (
           <Tube
-            key={`preview-${traveler.seatId}-${index}`}
-            points={dash}
+            key={`preview-${traveler.seatId}`}
+            points={points}
             color={colorHex(seat?.color ?? null)}
             radius={0.028}
             glow
             opacity={0.9}
           />
-        ));
+        );
       })}
       <EffectComposer>
         <Bloom luminanceThreshold={0.9} mipmapBlur intensity={0.65} />
