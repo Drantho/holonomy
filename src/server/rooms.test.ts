@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, createRoom, joinRoom, readRoom, roomHeartbeats } from "./rooms";
+import { act, ageRoom, createRoom, joinRoom, readRoom, ROOM_TTL_MS, roomHeartbeats } from "./rooms";
 
 const savedDatabaseUrl = process.env.DATABASE_URL;
 delete process.env.DATABASE_URL;
@@ -40,12 +40,43 @@ describe("room presence", () => {
     expect(beat.state.version).toBe(before);
   });
 
-  it("removes an empty lobby only when Leave is confirmed", async () => {
+  it("keeps the lobby after Leave so the same link can be used again", async () => {
     delete process.env.DATABASE_URL;
     const created = await createRoom("Ada");
     if (!created.ok) throw new Error("room was not created");
     const left = await act(created.code, created.token, "leave", { confirm: true });
     expect(left.ok).toBe(true);
+    const waiting = await readRoom(created.code);
+    expect(waiting?.state.phase).toBe("lobby");
+    expect(waiting?.state.seats).toEqual([]);
+    const rejoined = await joinRoom(created.code, "Bea");
+    expect(rejoined.ok).toBe(true);
+    if (!rejoined.ok) return;
+    expect(rejoined.state.seats.map((seat) => seat.name)).toEqual(["Bea"]);
+    expect(rejoined.state.hostId).toBe(rejoined.seatId);
+  });
+
+  it("keeps the room after a player wins", async () => {
+    delete process.env.DATABASE_URL;
+    const created = await createRoom("Ada");
+    if (!created.ok) throw new Error("room was not created");
+    const joined = await joinRoom(created.code, "Bea");
+    if (!joined.ok) throw new Error(joined.error);
+    expect((await act(created.code, created.token, "color", { color: "cyan" })).ok).toBe(true);
+    expect((await act(created.code, joined.token, "color", { color: "magenta" })).ok).toBe(true);
+    expect((await act(created.code, created.token, "start", {})).ok).toBe(true);
+    const left = await act(created.code, joined.token, "leave", { confirm: true });
+    expect(left.ok).toBe(true);
+    const room = await readRoom(created.code, created.token);
+    expect(room?.state.phase).toBe("finished");
+    expect(room?.state.result).toEqual({ kind: "win", seatId: 0 });
+  });
+
+  it("drops a room only after it has been idle past the time limit", async () => {
+    delete process.env.DATABASE_URL;
+    const created = await createRoom("Ada");
+    if (!created.ok) throw new Error("room was not created");
+    ageRoom(created.code, ROOM_TTL_MS + 1000);
     expect(await readRoom(created.code, created.token)).toBeNull();
   });
 

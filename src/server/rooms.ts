@@ -17,6 +17,7 @@ export type RoomData = {
   match: Match;
   tokens: Record<string, string>;
   heartbeats: Record<string, number>;
+  seen?: number;
   revision?: number;
 };
 
@@ -31,9 +32,10 @@ type MemoryGlobal = typeof globalThis & { __pathRooms?: Map<string, RoomData> };
 const memory = ((globalThis as MemoryGlobal).__pathRooms ??= new Map());
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-// Heartbeats stop while a phone is in another app. Ten minutes is long enough to
-// send the room link, or step away mid-game, without the seat being removed.
-const STALE_MS = 10 * 60 * 1000;
+// A room stays up while anyone is in it, after a player wins, and after Leave.
+// It is removed only once nobody has opened it for this long.
+export const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
+const TOUCH_MS = 60 * 1000;
 
 function database() {
   const url = process.env.DATABASE_URL;
@@ -69,22 +71,8 @@ export function viewRoom(data: RoomData, token?: string | null): RoomView {
   };
 }
 
-function sweep(data: RoomData, now = Date.now()): { data: RoomData; empty: boolean } {
-  if (data.match.public.phase === "finished") return { data, empty: false };
-  let match = data.match;
-  const ids = match.public.seats.map((seat) => seat.id);
-  for (const id of ids) {
-    const beat = data.heartbeats[String(id)] ?? 0;
-    if (now - beat <= STALE_MS) continue;
-    const player = match.public.seats.find((seat) => seat.id === id);
-    if (!player) continue;
-    if (match.public.phase !== "lobby" && !player.alive) continue;
-    const result = eliminateSeat(match, id);
-    if (!result.ok) continue;
-    match = result.match;
-    if (result.empty) return { data: { ...data, match }, empty: true };
-  }
-  return { data: { ...data, match }, empty: false };
+function expired(data: RoomData, now = Date.now()) {
+  return data.seen !== undefined && now - data.seen > ROOM_TTL_MS;
 }
 
 async function read(code: string): Promise<RoomData | null> {
@@ -138,6 +126,12 @@ export function roomHeartbeats(code: string): Record<string, number> | null {
   return memory.get(code.trim().toUpperCase())?.heartbeats ?? null;
 }
 
+export function ageRoom(code: string, ageMs: number) {
+  const data = memory.get(code.trim().toUpperCase());
+  if (!data) return;
+  data.seen = Date.now() - ageMs;
+}
+
 function makeCode(): string {
   const bytes = new Uint8Array(5);
   crypto.getRandomValues(bytes);
@@ -152,23 +146,18 @@ function makeToken(): string {
 
 export async function readRoom(code: string, token?: string | null) {
   const normalized = code.trim().toUpperCase();
-  let latest: RoomData | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const found = await read(normalized);
-    if (!found) return null;
-    latest = found;
-    const swept = sweep(found);
-    if (swept.empty) {
-      await remove(normalized);
-      return null;
-    }
-    if (swept.data.match.public.version === found.match.public.version) {
-      return viewRoom(swept.data, token);
-    }
-    const saved = await write(normalized, swept.data, found.revision ?? found.match.public.version);
-    if (saved) return viewRoom(swept.data, token);
+  const found = await read(normalized);
+  if (!found) return null;
+  if (expired(found)) {
+    await remove(normalized);
+    return null;
   }
-  return latest ? viewRoom(latest, token) : null;
+  const seen = found.seen ?? 0;
+  if (Date.now() - seen < TOUCH_MS) return viewRoom(found, token);
+  const next = structuredClone(found);
+  next.seen = Date.now();
+  const saved = await write(normalized, next, found.revision ?? found.match.public.version);
+  return viewRoom(saved ? next : found, token);
 }
 
 async function commit(
@@ -177,21 +166,16 @@ async function commit(
 ): Promise<{ data: RoomData; view: RoomView } | { error: string; view?: RoomView }> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const found = await read(code);
-    if (!found) return { error: "That room does not exist." };
+    if (!found || expired(found)) {
+      if (found) await remove(code);
+      return { error: "That room does not exist." };
+    }
     const before = found.revision ?? found.match.public.version;
     const result = change(structuredClone(found));
     if ("error" in result) return { error: result.error, view: viewRoom(found) };
-    if (result.empty) {
-      await remove(code);
-      return { data: result.data, view: viewRoom(result.data) };
-    }
-    const swept = sweep(result.data);
-    if (swept.empty) {
-      await remove(code);
-      return { data: swept.data, view: viewRoom(swept.data) };
-    }
-    const saved = await write(code, swept.data, before);
-    if (saved) return { data: swept.data, view: viewRoom(swept.data) };
+    result.data.seen = Date.now();
+    const saved = await write(code, result.data, before);
+    if (saved) return { data: result.data, view: viewRoom(result.data) };
   }
   return { error: "The board changed. Look again, then lock in." };
 }
@@ -209,6 +193,7 @@ export async function createRoom(name: string, size = 6, tokenSeatView = true) {
     match: created.match,
     tokens: { "0": token },
     heartbeats: { "0": Date.now() },
+    seen: Date.now(),
   };
   await write(code, data, null);
   return { ok: true as const, code, token, seatId: 0, ...viewRoom(data, tokenSeatView ? token : null) };
@@ -224,6 +209,7 @@ export async function joinRoom(code: string, name: string) {
     if (!joined.ok) return { error: joined.error };
     seatId = joined.match.public.seats[joined.match.public.seats.length - 1].id;
     data.match = joined.match;
+    if (data.match.public.hostId == null) data.match.public.hostId = seatId;
     data.tokens[String(seatId)] = token;
     data.heartbeats[String(seatId)] = Date.now();
     return { data };
@@ -300,7 +286,8 @@ export async function act(
       if (!left.ok) return { error: left.error };
       data.match = left.match;
       delete data.heartbeats[String(seatId)];
-      return { data, empty: left.empty };
+      delete data.tokens[String(seatId)];
+      return { data };
     }
     return { error: "Unknown action." };
   });

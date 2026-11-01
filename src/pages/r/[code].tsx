@@ -25,6 +25,7 @@ export default function RoomPage() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const misses = useRef(0);
+  const held = useRef(false);
 
   useEffect(() => {
     if (!code) return;
@@ -42,13 +43,15 @@ export default function RoomPage() {
       const body = (await response.json()) as RoomPayload;
       if (!response.ok) {
         misses.current += 1;
-        if (misses.current >= 5) {
+        // A live board stays up. The warning is only for a room we never loaded.
+        if (!held.current && misses.current >= 5) {
           setError(body.error ?? "That room does not exist.");
           setPayload(null);
         }
         return;
       }
       misses.current = 0;
+      held.current = true;
       setPayload(body);
       setError("");
     } catch {
