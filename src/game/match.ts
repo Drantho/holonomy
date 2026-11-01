@@ -1,4 +1,5 @@
 import {
+  asBoardSize,
   cellKey,
   internalLink,
   isOuterStance,
@@ -11,6 +12,7 @@ import {
   sameStance,
   seamLink,
   stanceKey,
+  type BoardSize,
   type Cell,
   type Stance,
 } from "./geometry";
@@ -18,6 +20,11 @@ import { isMatching, makeDeck, mulberry32, type Piece } from "./pieces";
 import { ROTATION_COUNT, worldPartner } from "./rotations";
 
 export const DECK_SIZE = 216;
+
+export function deckSize(size: number): number {
+  const edge = asBoardSize(size);
+  return edge * edge * edge;
+}
 export const HAND_SIZE = 3;
 export const MIN_LIVE_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
@@ -80,6 +87,7 @@ export type PublicState = {
   hostId: number | null;
   version: number;
   result: Result | null;
+  size: BoardSize;
 };
 
 export type Match = {
@@ -150,9 +158,10 @@ function validColor(color: string): color is ColorId {
   return COLORS.some((entry) => entry.id === color);
 }
 
-export function createLobby(hostName: string): RuleMatch | RuleFail {
+export function createLobby(hostName: string, size: number = 6): RuleMatch | RuleFail {
   const name = validName(hostName);
   if (!name) return fail("Enter a name up to 16 characters.");
+  if (size !== 4 && size !== 5 && size !== 6) return fail("Pick a 4×4×4, 5×5×5, or 6×6×6 cube.");
   const match: Match = {
     public: {
       mode: "live",
@@ -176,6 +185,7 @@ export function createLobby(hostName: string): RuleMatch | RuleFail {
       hostId: 0,
       version: 1,
       result: null,
+      size,
     },
     hands: { 0: [] },
     pile: [],
@@ -184,10 +194,16 @@ export function createLobby(hostName: string): RuleMatch | RuleFail {
   return { ok: true, match };
 }
 
-export function createPractice(playerName: string, color: string, seed: number): RuleMatch | RuleFail {
+export function createPractice(
+  playerName: string,
+  color: string,
+  seed: number,
+  size: number = 6,
+): RuleMatch | RuleFail {
   const name = validName(playerName);
   if (!name) return fail("Enter a name up to 16 characters.");
   if (!validColor(color)) return fail("Pick a color.");
+  if (size !== 4 && size !== 5 && size !== 6) return fail("Pick a 4×4×4, 5×5×5, or 6×6×6 cube.");
   const match: Match = {
     public: {
       mode: "practice",
@@ -211,10 +227,11 @@ export function createPractice(playerName: string, color: string, seed: number):
       hostId: 0,
       version: 1,
       result: null,
+      size,
     },
     hands: { 0: [] },
     pile: [],
-    undealt: makeDeck(DECK_SIZE, mulberry32(seed)),
+    undealt: makeDeck(deckSize(size), mulberry32(seed)),
   };
   return { ok: true, match };
 }
@@ -267,7 +284,7 @@ export function startLive(match: Match, seatId: number, seed: number): RuleMatch
     return fail("Every player needs a color first.");
   }
   const next = clone(match);
-  next.undealt = makeDeck(DECK_SIZE, mulberry32(seed));
+  next.undealt = makeDeck(deckSize(next.public.size), mulberry32(seed));
   next.public.phase = "starts";
   next.public.activeSeat = next.public.seats[0]?.id ?? null;
   bump(next);
@@ -296,7 +313,7 @@ export function claimStart(match: Match, seatId: number, stance: Stance): RuleMa
   const next = clone(match);
   const player = seat(next, seatId);
   if (!player?.alive) return fail("You are not in this match.");
-  if (!isOuterStance(stance) || stance.slot < 0 || stance.slot > 3) {
+  if (!isOuterStance(stance, asBoardSize(next.public.size)) || stance.slot < 0 || stance.slot > 3) {
     return fail("Pick an exit on the outer surface.");
   }
   if (next.public.seats.some((entry) => entry.stance && sameStance(entry.stance, stance))) {
@@ -322,6 +339,7 @@ function traceTraveler(
   const segments: Segment[] = [];
   const links: string[] = [];
   const visited = new Set<string>();
+  const edge = asBoardSize(state.size);
   let current = placedCell;
   let face = start.face;
   let slot = start.slot;
@@ -342,8 +360,8 @@ function traceTraveler(
     links.push(internalLink(current, entry, exit));
     const exitFace = portFace(exit);
     const exitSlot = portSlot(exit);
-    links.push(seamLink(current, exitFace, exitSlot));
-    const next = neighborCell(current, exitFace);
+    links.push(seamLink(current, exitFace, exitSlot, edge));
+    const next = neighborCell(current, exitFace, edge);
     if (!next) {
       return { segments, links, eliminated: true, reason: "off", stance: null };
     }

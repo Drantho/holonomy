@@ -1,4 +1,10 @@
-export const BOARD_SIZE = 6;
+export const BOARD_SIZES = [4, 5, 6] as const;
+export type BoardSize = (typeof BOARD_SIZES)[number];
+export const BOARD_SIZE: BoardSize = 6;
+
+export function asBoardSize(size: number | undefined): BoardSize {
+  return size === 4 || size === 5 || size === 6 ? size : BOARD_SIZE;
+}
 export const PORTS_PER_FACE = 4;
 export const PORT_COUNT = 24;
 
@@ -62,26 +68,27 @@ export function stanceKey(stance: Stance): string {
   return `${cellKey(stance.cell)}:${stance.face}:${stance.slot}`;
 }
 
-export function onBoard(cell: Cell): boolean {
-  return cell.every((value) => value >= 0 && value < BOARD_SIZE);
+export function onBoard(cell: Cell, size: number = BOARD_SIZE): boolean {
+  return cell.every((value) => value >= 0 && value < size);
 }
 
-export function neighborCell(cell: Cell, face: number): Cell | null {
+export function neighborCell(cell: Cell, face: number, size: number = BOARD_SIZE): Cell | null {
   const normal = NORMALS[face];
   const next: Cell = [
     cell[0] + normal[0],
     cell[1] + normal[1],
     cell[2] + normal[2],
   ];
-  return onBoard(next) ? next : null;
+  return onBoard(next, size) ? next : null;
 }
 
-export function isOuterStance(stance: Stance): boolean {
-  return onBoard(stance.cell) && neighborCell(stance.cell, stance.face) === null;
+export function isOuterStance(stance: Stance, size: number = BOARD_SIZE): boolean {
+  return onBoard(stance.cell, size) && neighborCell(stance.cell, stance.face, size) === null;
 }
 
-export function cellCenter(cell: Cell): Vec3 {
-  return [cell[0] - 2.5, cell[1] - 2.5, cell[2] - 2.5];
+export function cellCenter(cell: Cell, size: number = BOARD_SIZE): Vec3 {
+  const origin = (size - 1) / 2;
+  return [cell[0] - origin, cell[1] - origin, cell[2] - origin];
 }
 
 /** Port position relative to the center of a unit cell. Shared faces use the same slot index. */
@@ -99,20 +106,20 @@ export function portOffset(face: number, slot: number): Vec3 {
   return offset;
 }
 
-export function stancePoint(stance: Stance): Vec3 {
-  const center = cellCenter(stance.cell);
+export function stancePoint(stance: Stance, size: number = BOARD_SIZE): Vec3 {
+  const center = cellCenter(stance.cell, size);
   const offset = portOffset(stance.face, stance.slot);
   return [center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]];
 }
 
-export function listOuterStances(): Stance[] {
+export function listOuterStances(size: number = BOARD_SIZE): Stance[] {
   const stances: Stance[] = [];
-  for (let x = 0; x < BOARD_SIZE; x += 1) {
-    for (let y = 0; y < BOARD_SIZE; y += 1) {
-      for (let z = 0; z < BOARD_SIZE; z += 1) {
+  for (let x = 0; x < size; x += 1) {
+    for (let y = 0; y < size; y += 1) {
+      for (let z = 0; z < size; z += 1) {
         const cell: Cell = [x, y, z];
         for (let face = 0; face < 6; face += 1) {
-          if (neighborCell(cell, face) !== null) continue;
+          if (neighborCell(cell, face, size) !== null) continue;
           for (let slot = 0; slot < PORTS_PER_FACE; slot += 1) {
             stances.push({ cell, face, slot });
           }
@@ -129,8 +136,8 @@ export function internalLink(cell: Cell, a: number, b: number): string {
   return `i:${cellKey(cell)}:${lo}-${hi}`;
 }
 
-export function seamLink(cell: Cell, face: number, slot: number): string {
-  const next = neighborCell(cell, face);
+export function seamLink(cell: Cell, face: number, slot: number, size: number = BOARD_SIZE): string {
+  const next = neighborCell(cell, face, size);
   if (!next) return `o:${cellKey(cell)}:${face}:${slot}`;
   const here = cellKey(cell);
   const there = cellKey(next);

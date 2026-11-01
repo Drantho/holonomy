@@ -63,6 +63,7 @@ function state(seats: Match["public"]["seats"], board: PublicState["board"] = {}
     hostId: 0,
     version: 1,
     result: null,
+    size: 6,
   };
 }
 
@@ -189,6 +190,15 @@ describe("placement", () => {
 });
 
 describe("match results", () => {
+  it("starts practice on the cube the player picked", () => {
+    const created = createPractice("Ada", "cyan", 7, 5);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.match.public.size).toBe(5);
+    expect(created.match.undealt).toHaveLength(125);
+    expect(createPractice("Ada", "cyan", 7, 2).ok).toBe(false);
+  });
+
   it("deals three pieces after the only practice exit is claimed", () => {
     const created = createPractice("Ada", "cyan", 7);
     expect(created.ok).toBe(true);
@@ -316,6 +326,38 @@ describe("match results", () => {
     const started = startLive(bea.match, 0, 3);
     expect(started.ok).toBe(true);
     expect(colorHex("amber")).toBe("#ffc14a");
+  });
+
+  it("builds a 4×4×4 deck with one piece per cell", () => {
+    const created = createLobby("Ada", 4);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.match.public.size).toBe(4);
+    const joined = joinLobby(created.match, "Bea");
+    if (!joined.ok) return;
+    const ada = setColor(joined.match, 0, "cyan");
+    if (!ada.ok) return;
+    const bea = setColor(ada.match, 1, "magenta");
+    if (!bea.ok) return;
+    const started = startLive(bea.match, 0, 3);
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.match.undealt).toHaveLength(64);
+  });
+
+  it("refuses a cube that is not 4, 5, or 6 on a side", () => {
+    expect(createLobby("Ada", 7).ok).toBe(false);
+    expect(createLobby("Ada", 6).ok).toBe(true);
+  });
+
+  it("falls off the far face of a 4×4×4 cube", () => {
+    const played = piece("edge", [[portId(1, 0), portId(0, 0)]]);
+    const publicState = state([seat(0, stance([3, 0, 0], 1, 0))]);
+    publicState.size = 4;
+    const preview = resolvePlacement(publicState, 0, played, 0);
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.youLose).toBe(true);
   });
 });
 

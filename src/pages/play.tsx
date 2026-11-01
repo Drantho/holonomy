@@ -1,11 +1,21 @@
 import Head from "next/head";
 import { useState } from "react";
 import MatchTable, { handOf } from "@/components/MatchTable";
-import { claimStart, COLORS, createPractice, placePiece, type Match, type Stance } from "@/game";
+import {
+  BOARD_SIZES,
+  claimStart,
+  COLORS,
+  createPractice,
+  placePiece,
+  type BoardSize,
+  type Match,
+  type Stance,
+} from "@/game";
 
 export default function PlayPage() {
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(COLORS[0].id);
+  const [size, setSize] = useState<BoardSize>(6);
   const [match, setMatch] = useState<Match | null>(null);
   const [error, setError] = useState("");
 
@@ -20,7 +30,7 @@ export default function PlayPage() {
             className="glass menu-card"
             onSubmit={(event) => {
               event.preventDefault();
-              const created = createPractice(name, color, Date.now() % 2147483647 || 1);
+              const created = createPractice(name, color, Date.now() % 2147483647 || 1, size);
               if (!created.ok) {
                 setError(created.error);
                 return;
@@ -35,6 +45,18 @@ export default function PlayPage() {
               Name
               <input value={name} maxLength={16} onChange={(event) => setName(event.target.value)} />
             </label>
+            <div className="sizes" role="group" aria-label="Play area">
+              {BOARD_SIZES.map((edge) => (
+                <button
+                  key={edge}
+                  type="button"
+                  className={size === edge ? "on" : ""}
+                  onClick={() => setSize(edge)}
+                >
+                  {edge}×{edge}×{edge}
+                </button>
+              ))}
+            </div>
             <div className="swatches">
               {COLORS.map((entry) => (
                 <button

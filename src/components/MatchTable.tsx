@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import {
+  asBoardSize,
   colorHex,
   composeRotation,
   previewForHand,
@@ -104,6 +105,7 @@ export default function MatchTable({
             </li>
           ))}
         </ul>
+        <p className="meta">{cubeLabel(asBoardSize(state.size))}</p>
         {state.phase === "playing" && <p className="meta">Pile {state.pileCount}</p>}
         {state.phase === "starts" && state.activeSeat === you && (
           <p className="meta">Click an open exit on the outside of the cube.</p>
@@ -170,6 +172,10 @@ export default function MatchTable({
       )}
     </div>
   );
+}
+
+function cubeLabel(size: number) {
+  return `${size}×${size}×${size}`;
 }
 
 function titleFor(state: PublicState) {

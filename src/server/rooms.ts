@@ -181,13 +181,13 @@ async function commit(
   return { error: "The board changed. Look again, then lock in." };
 }
 
-export async function createRoom(name: string, tokenSeatView = true) {
+export async function createRoom(name: string, size = 6, tokenSeatView = true) {
   let code = makeCode();
   for (let attempt = 0; attempt < 6; attempt += 1) {
     if (!(await read(code))) break;
     code = makeCode();
   }
-  const created = createLobby(name);
+  const created = createLobby(name, size);
   if (!created.ok) return created;
   const token = makeToken();
   const data: RoomData = {

@@ -1,6 +1,8 @@
 export { COLORS, colorHex, type ColorId } from "./match";
 export {
+  asBoardSize,
   BOARD_SIZE,
+  BOARD_SIZES,
   cellCenter,
   cellKey,
   listOuterStances,
@@ -9,6 +11,7 @@ export {
   samplePath,
   sameStance,
   stancePoint,
+  type BoardSize,
   type Cell,
   type Stance,
   type Vec3,
@@ -18,6 +21,7 @@ export {
   claimStart,
   createLobby,
   createPractice,
+  deckSize,
   DECK_SIZE,
   eliminateSeat,
   HAND_SIZE,

@@ -4,6 +4,7 @@ import { OrbitControls } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import {
+  asBoardSize,
   cellCenter,
   cellKey,
   colorHex,
@@ -19,8 +20,6 @@ import {
   type Vec3,
 } from "@/game";
 import { rotationMatrix } from "@/game/rotations";
-
-const OUTER = listOuterStances();
 
 function quaternionFor(rotation: number) {
   const m = rotationMatrix(rotation);
@@ -127,9 +126,19 @@ function PieceModel({
   );
 }
 
-function worldPoints(segment: Segment): Vec3[] {
+function pathEnd(seat: { stance: Stance | null; trail: Segment[] }, size: number): Vec3 | null {
+  if (seat.stance) return stancePoint(seat.stance, size);
+  const last = seat.trail[seat.trail.length - 1];
+  if (!last) return null;
+  const end = samplePath(last.a, last.b).at(-1);
+  if (!end) return null;
+  const origin = cellCenter(last.cell, size);
+  return [origin[0] + end[0], origin[1] + end[1], origin[2] + end[2]];
+}
+
+function worldPoints(segment: Segment, size: number): Vec3[] {
   const local = samplePath(segment.a, segment.b);
-  const origin = cellCenter(segment.cell);
+  const origin = cellCenter(segment.cell, size);
   return local.map((point) => [
     point[0] + origin[0],
     point[1] + origin[1],
@@ -137,23 +146,24 @@ function worldPoints(segment: Segment): Vec3[] {
   ]);
 }
 
-function Lattice() {
+function Lattice({ size }: { size: number }) {
   const geometry = useMemo(() => {
     const positions: number[] = [];
     const push = (a: Vec3, b: Vec3) => positions.push(...a, ...b);
-    for (let i = 0; i <= 6; i += 1) {
-      for (let j = 0; j <= 6; j += 1) {
-        const u = i - 3;
-        const v = j - 3;
-        push([u, v, -3], [u, v, 3]);
-        push([u, -3, v], [u, 3, v]);
-        push([-3, u, v], [3, u, v]);
+    const half = size / 2;
+    for (let i = 0; i <= size; i += 1) {
+      for (let j = 0; j <= size; j += 1) {
+        const u = i - half;
+        const v = j - half;
+        push([u, v, -half], [u, v, half]);
+        push([u, -half, v], [u, half, v]);
+        push([-half, u, v], [half, u, v]);
       }
     }
     const buffer = new THREE.BufferGeometry();
     buffer.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     return buffer;
-  }, []);
+  }, [size]);
   return (
     <lineSegments geometry={geometry}>
       <lineBasicMaterial color="#3a4558" />
@@ -171,6 +181,10 @@ function StartMarkers({
   onClaim: (stance: Stance) => void;
 }) {
   const mesh = useRef<THREE.InstancedMesh>(null);
+  const size = asBoardSize(state.size);
+  const outer = useMemo(() => listOuterStances(size), [size]);
+  const outerRef = useRef(outer);
+  outerRef.current = outer;
   const yourTurn = state.phase === "starts" && state.activeSeat === you;
   const { gl, camera } = useThree();
   const claimRef = useRef(onClaim);
@@ -211,7 +225,7 @@ function StartMarkers({
         if (best < 0.18) instanceId = bestIndex;
       }
       if (instanceId === undefined || instanceId < 0) return;
-      const stance = OUTER[instanceId];
+      const stance = outerRef.current[instanceId];
       const taken = stateRef.current.seats.some((seat) => seat.stance && sameStance(seat.stance, stance));
       if (!stance || taken) return;
       event.stopImmediatePropagation();
@@ -226,11 +240,11 @@ function StartMarkers({
     if (!current) return;
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
-    OUTER.forEach((stance, index) => {
+    outer.forEach((stance, index) => {
       const owner = state.seats.find((seat) => seat.stance && sameStance(seat.stance, stance));
-      const point = stancePoint(stance);
+      const point = stancePoint(stance, size);
       dummy.position.set(point[0], point[1], point[2]);
-      dummy.scale.setScalar(owner ? 1.35 : 1);
+      dummy.scale.setScalar(owner ? 0 : 1);
       dummy.updateMatrix();
       current.setMatrixAt(index, dummy.matrix);
       color.set(owner ? colorHex(owner.color) : yourTurn ? "#c5ceda" : "#7f8b9c");
@@ -239,11 +253,11 @@ function StartMarkers({
     current.instanceMatrix.needsUpdate = true;
     if (current.instanceColor) current.instanceColor.needsUpdate = true;
     current.computeBoundingSphere();
-  }, [state, yourTurn]);
+  }, [state, yourTurn, outer, size]);
 
   if (state.phase !== "starts") return null;
   return (
-    <instancedMesh ref={mesh} args={[undefined, undefined, OUTER.length]}>
+    <instancedMesh ref={mesh} args={[undefined, undefined, outer.length]}>
       <sphereGeometry args={[0.05, 10, 10]} />
       <meshBasicMaterial />
     </instancedMesh>
@@ -268,17 +282,18 @@ function BoardContents({
   const youSeat = state.seats.find((seat) => seat.id === you);
   const yourTurn = state.phase === "playing" && state.activeSeat === you && Boolean(youSeat?.alive);
   const faced = yourTurn ? youSeat?.stance : null;
+  const size = asBoardSize(state.size);
 
   return (
     <>
       <color attach="background" args={["#07080c"]} />
       <ambientLight intensity={0.6} />
       <OrbitControls enableDamping makeDefault minDistance={5} maxDistance={18} />
-      <Lattice />
+      <Lattice size={size} />
       <StartMarkers state={state} you={you} onClaim={onClaim} />
       {Object.entries(state.board).map(([key, placed]) => {
         const [x, y, z] = key.split(",").map(Number) as [number, number, number];
-        const center = cellCenter([x, y, z]);
+        const center = cellCenter([x, y, z], size);
         return (
           <group key={key} position={center}>
             <PieceModel partner={placed.partner} rotation={placed.rotation} />
@@ -289,37 +304,36 @@ function BoardContents({
         seat.trail.map((segment, index) => (
           <Tube
             key={`${seat.id}-${index}-${cellKey(segment.cell)}-${segment.a}-${segment.b}`}
-            points={worldPoints(segment)}
+            points={worldPoints(segment, size)}
             color={colorHex(seat.color)}
             radius={0.032}
             glow
           />
         )),
       )}
-      {state.phase !== "starts" &&
-        state.seats.map((seat) => {
-          if (!seat.alive || !seat.stance) return null;
-          const point = stancePoint(seat.stance);
-          return (
-            <mesh key={`peg-${seat.id}`} position={point}>
-              <sphereGeometry args={[0.07, 16, 16]} />
-              <meshStandardMaterial
-                color={colorHex(seat.color)}
-                emissive={colorHex(seat.color)}
-                emissiveIntensity={2.5}
-                toneMapped={false}
-              />
-            </mesh>
-          );
-        })}
+      {state.seats.map((seat) => {
+        const point = pathEnd(seat, size);
+        if (!point) return null;
+        return (
+          <mesh key={`peg-${seat.id}`} position={point}>
+            <sphereGeometry args={[0.11, 18, 18]} />
+            <meshStandardMaterial
+              color={colorHex(seat.color)}
+              emissive={colorHex(seat.color)}
+              emissiveIntensity={2.2}
+              toneMapped={false}
+            />
+          </mesh>
+        );
+      })}
       {faced && (
-        <mesh position={cellCenter(faced.cell)}>
+        <mesh position={cellCenter(faced.cell, size)}>
           <boxGeometry args={[1.04, 1.04, 1.04]} />
           <meshBasicMaterial color={colorHex(youSeat?.color ?? null)} wireframe transparent opacity={0.35} />
         </mesh>
       )}
       {yourTurn && selected && faced && (
-        <group position={cellCenter(faced.cell)}>
+        <group position={cellCenter(faced.cell, size)}>
           <PieceModel partner={selected.partner} rotation={rotation} ghost />
         </group>
       )}
@@ -333,7 +347,7 @@ function BoardContents({
         return traveler.segments.map((segment, index) => (
           <Tube
             key={`preview-${traveler.seatId}-${index}`}
-            points={worldPoints(segment)}
+            points={worldPoints(segment, size)}
             color={colorHex(seat?.color ?? null)}
             radius={0.04}
             glow

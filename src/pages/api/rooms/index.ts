@@ -12,7 +12,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!result.ok) return res.status(result.spectate ? 409 : 400).json(result);
     return res.status(200).json(result);
   }
-  const created = await createRoom(String(req.body?.name ?? ""));
+  const rawSize = req.body?.size;
+  const size = rawSize === undefined || rawSize === null || rawSize === "" ? 6 : Number(rawSize);
+  const created = await createRoom(String(req.body?.name ?? ""), size);
   if (!created.ok) return res.status(400).json(created);
   return res.status(200).json(created);
 }

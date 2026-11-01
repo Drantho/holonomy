@@ -2,10 +2,12 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { FormEvent, useState } from "react";
 import { saveSession } from "@/client/session";
+import { BOARD_SIZES, type BoardSize } from "@/game";
 
 export default function Home() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [size, setSize] = useState<BoardSize>(6);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -17,7 +19,7 @@ export default function Home() {
     const response = await fetch("/api/rooms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create", name }),
+      body: JSON.stringify({ action: "create", name, size }),
     });
     const body = await response.json();
     setBusy(false);
@@ -63,12 +65,24 @@ export default function Home() {
           <p className="eyebrow">Holonomy</p>
           <h1>Find a way through.</h1>
           <p className="lede">
-            A 6×6×6 cube of paths. Practice alone, or open a live room for two to six players.
+            A cube of paths. Practice alone, or open a live room for two to six players.
           </p>
           <label>
             Name
             <input value={name} maxLength={16} onChange={(event) => setName(event.target.value)} />
           </label>
+          <div className="sizes" role="group" aria-label="Play area">
+            {BOARD_SIZES.map((edge) => (
+              <button
+                key={edge}
+                type="button"
+                className={size === edge ? "on" : ""}
+                onClick={() => setSize(edge)}
+              >
+                {edge}×{edge}×{edge}
+              </button>
+            ))}
+          </div>
           {error && <p className="error">{error}</p>}
           <div className="actions">
             <button type="button" className="primary" onClick={() => void router.push("/play")}>
