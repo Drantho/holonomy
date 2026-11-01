@@ -13,9 +13,10 @@
     "@react-three/fiber": "^9.8.2",
     "@react-three/postprocessing": "^3.2.2",
     "next": "16.4.3",
+    "postprocessing": "6.39.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "three": "^0.187.0"
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@types/node": "^20",
