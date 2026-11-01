@@ -52,7 +52,10 @@ export default function RoomPage() {
       }
       misses.current = 0;
       held.current = true;
-      setPayload(body);
+      setPayload((current) => {
+        if (current && body.state.version < current.state.version) return current;
+        return body;
+      });
       setError("");
     } catch {
       misses.current += 1;
@@ -103,20 +106,38 @@ export default function RoomPage() {
   async function post(action: string, extra: Record<string, unknown> = {}) {
     if (!session) return false;
     setBusy(true);
-    const response = await fetch(`/api/rooms/${code}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, token: session.token, ...extra }),
-    });
-    const body = (await response.json()) as RoomPayload;
-    setBusy(false);
-    if (body.state) setPayload(body);
-    if (!response.ok) {
-      setError(body.error ?? "That move was rejected.");
+    try {
+      const send = () =>
+        fetch(`/api/rooms/${code}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, token: session.token, ...extra }),
+        });
+      let response = await send();
+      let body = (await response.json()) as RoomPayload;
+      if (!response.ok && body.error?.includes("does not exist")) {
+        response = await send();
+        body = (await response.json()) as RoomPayload;
+      }
+      if (body.state) {
+        held.current = true;
+        setPayload((current) => {
+          if (current && body.state.version < current.state.version) return current;
+          return body;
+        });
+      }
+      if (!response.ok) {
+        setError(body.error ?? "That move was rejected.");
+        return false;
+      }
+      setError("");
+      return true;
+    } catch {
+      setError("The room did not answer. Try that again.");
       return false;
+    } finally {
+      setBusy(false);
     }
-    setError("");
-    return true;
   }
 
   async function join(event: FormEvent) {
@@ -149,7 +170,18 @@ export default function RoomPage() {
       <Head>
         <title>{code ? `${code} · Holonomy` : "Holonomy"}</title>
       </Head>
-      {!state && <main className="menu-screen">{error ? <p className="error">{error}</p> : <p>Opening room…</p>}</main>}
+      {!state && (
+        <main className="menu-screen">
+          {error ? (
+            <div className="glass missing">
+              <p className="error">{error}</p>
+              <a href="/">Home</a>
+            </div>
+          ) : (
+            <p>Opening room…</p>
+          )}
+        </main>
+      )}
       {state && (
         <MatchTable
           state={state}
@@ -251,7 +283,13 @@ function LobbyPanel({
       {notice && <p className="error">{notice}</p>}
       {host ? (
         <>
-          {!ready && <p className="meta">Every player needs a different color before the match can start.</p>}
+          {!ready && (
+            <p className="meta">
+              {state.seats.length < 2
+                ? "Waiting for at least one more player."
+                : "Every player needs a different color before the match can start."}
+            </p>
+          )}
           <button type="button" className="primary" disabled={!ready || busy} onClick={onStart}>
             Start match
           </button>

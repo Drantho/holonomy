@@ -248,8 +248,17 @@ button:disabled {
   color: var(--text);
 }
 
+.missing {
+  width: min(360px, 100%);
+  padding: 28px;
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
 .text-button,
-.result a {
+.result a,
+.missing a {
   border: 0;
   background: transparent;
   color: var(--accent);
