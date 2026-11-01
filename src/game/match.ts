@@ -20,12 +20,13 @@ import {
 import { isMatching, makeDeck, mulberry32, type Piece } from "./pieces";
 import { ROTATION_COUNT, worldPartner } from "./rotations";
 
-export const DECK_SIZE = 216;
-
+// One piece short of the cube, so placing the last piece can end the match.
 export function deckSize(size: number): number {
   const edge = asBoardSize(size);
-  return edge * edge * edge;
+  return edge * edge * edge - 1;
 }
+
+export const DECK_SIZE = deckSize(6);
 export const HAND_SIZE = 3;
 export const MIN_LIVE_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
@@ -60,7 +61,7 @@ export type Placed = {
 export type Phase = "lobby" | "starts" | "playing" | "finished";
 
 export type Result =
-  | { kind: "win"; seatId: number }
+  | { kind: "win"; seatId: number; seatIds?: number[] }
   | { kind: "tie"; seatIds: number[] }
   | { kind: "loss" }
   | { kind: "clear" }
@@ -566,14 +567,13 @@ function advance(match: Match, fromSeat: number) {
       settle(match);
     }
     if ((match.hands[id] ?? []).length > 0) return;
-    if (match.public.mode === "practice" && match.pile.length === 0) {
-      finish(match, { kind: "clear" });
-      return;
-    }
   }
+  // Every piece is on the cube. Everyone still on it wins.
   const left = living(match);
-  if (left.length === 1) finish(match, { kind: "win", seatId: left[0].id });
-  else if (left.length > 1) finish(match, { kind: "tie", seatIds: left.map((entry) => entry.id) });
+  if (left.length > 1) {
+    const seatIds = left.map((entry) => entry.id);
+    finish(match, { kind: "win", seatId: seatIds[0], seatIds });
+  } else if (left.length === 1) finish(match, { kind: "win", seatId: left[0].id });
   else finish(match, { kind: "abandon" });
 }
 

@@ -195,12 +195,12 @@ describe("match results", () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
     expect(created.match.public.size).toBe(5);
-    expect(created.match.undealt).toHaveLength(125);
+    expect(created.match.undealt).toHaveLength(124);
     const small = createPractice("Ada", "cyan", 7, 3);
     expect(small.ok).toBe(true);
     if (!small.ok) return;
     expect(small.match.public.size).toBe(3);
-    expect(small.match.undealt).toHaveLength(27);
+    expect(small.match.undealt).toHaveLength(26);
     expect(createPractice("Ada", "cyan", 7, 2).ok).toBe(false);
   });
 
@@ -213,7 +213,7 @@ describe("match results", () => {
     if (!claimed.ok) return;
     expect(claimed.match.public.phase).toBe("playing");
     expect(claimed.match.hands[0]).toHaveLength(3);
-    expect(claimed.match.pile).toHaveLength(213);
+    expect(claimed.match.pile).toHaveLength(212);
   });
 
   it("refuses to start a live room with one player", () => {
@@ -301,7 +301,7 @@ describe("match results", () => {
     expect(placed.match.public.seats.find((entry) => entry.id === 1)?.alive).toBe(false);
   });
 
-  it("clears a practice run when the hand and the pile are both empty", () => {
+  it("lets the practice player win by placing the last piece", () => {
     const played = piece("final", [[portId(1, 0), portId(0, 0)]]);
     const match = matchFrom([seat(0, stance([0, 0, 0], 1, 0))], { 0: [played] }, {
       mode: "practice",
@@ -310,7 +310,24 @@ describe("match results", () => {
     const placed = placePiece(match, 0, played.id, 0);
     expect(placed.ok).toBe(true);
     if (!placed.ok) return;
-    expect(placed.match.public.result).toEqual({ kind: "clear" });
+    expect(placed.match.public.result).toEqual({ kind: "win", seatId: 0 });
+  });
+
+  it("lets everyone still on the cube win when the last piece is placed", () => {
+    const played = piece("final", [
+      [portId(1, 0), portId(0, 0)],
+      [portId(2, 0), portId(3, 0)],
+    ]);
+    const match = matchFrom(
+      [seat(0, stance([1, 0, 0], 1, 0)), seat(1, stance([4, 4, 4], 0, 0))],
+      { 0: [played], 1: [] },
+      { pile: [] },
+    );
+    const placed = placePiece(match, 0, played.id, 0);
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    expect(placed.match.public.phase).toBe("finished");
+    expect(placed.match.public.result).toEqual({ kind: "win", seatId: 0, seatIds: [0, 1] });
   });
 
   it("lets a second player join and take a free color", () => {
@@ -336,7 +353,7 @@ describe("match results", () => {
     expect(colorHex("amber")).toBe("#ffc14a");
   });
 
-  it("builds a 4×4×4 deck with one piece per cell", () => {
+  it("builds a 4×4×4 deck one piece short of the cube", () => {
     const created = createLobby("Ada", 4);
     expect(created.ok).toBe(true);
     if (!created.ok) return;
@@ -350,7 +367,7 @@ describe("match results", () => {
     const started = startLive(bea.match, 0, 3);
     expect(started.ok).toBe(true);
     if (!started.ok) return;
-    expect(started.match.undealt).toHaveLength(64);
+    expect(started.match.undealt).toHaveLength(63);
   });
 
   it("refuses a cube that is not an offered size", () => {

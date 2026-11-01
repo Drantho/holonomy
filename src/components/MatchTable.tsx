@@ -197,8 +197,11 @@ function resultTitle(state: PublicState) {
   const result = state.result;
   if (!result) return "Match over";
   if (result.kind === "win") {
-    const name = state.seats.find((seat) => seat.id === result.seatId)?.name ?? "A player";
-    return `${name} wins`;
+    const ids = result.seatIds && result.seatIds.length > 0 ? result.seatIds : [result.seatId];
+    const names = ids.map((id) => state.seats.find((seat) => seat.id === id)?.name ?? "A player");
+    if (names.length === 1) return `${names[0]} wins`;
+    if (names.length === 2) return `${names[0]} and ${names[1]} win`;
+    return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]} win`;
   }
   if (result.kind === "tie") {
     const names = result.seatIds
