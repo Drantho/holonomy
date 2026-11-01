@@ -65,9 +65,10 @@ export default function MatchTable({
 
   const others = namesFor(state, preview, you);
   const link = roomCode && typeof window !== "undefined" ? `${window.location.origin}/r/${roomCode}` : "";
+  const showTray = Boolean(youSeat?.alive && state.phase === "playing");
 
   return (
-    <div className="table">
+    <div className={showTray ? "table has-tray" : "table"}>
       <BoardScene
         state={state}
         you={youSeat?.alive ? you : null}
@@ -77,8 +78,17 @@ export default function MatchTable({
         onClaim={onClaim}
       />
       <header className="glass hud">
-        <p className="eyebrow">{state.mode === "practice" ? "Practice" : "Live room"}</p>
-        <h1>{titleFor(state)}</h1>
+        <div className="hud-head">
+          <div>
+            <p className="eyebrow">{state.mode === "practice" ? "Practice" : "Live room"}</p>
+            <h1>{titleFor(state)}</h1>
+          </div>
+          {onLeave && (
+            <button type="button" className="text-button" onClick={onLeave}>
+              Leave
+            </button>
+          )}
+        </div>
         {roomCode && (
           <p className="code-row">
             <span>{roomCode}</span>
@@ -93,32 +103,29 @@ export default function MatchTable({
             </button>
           </p>
         )}
-        <ul className="roster">
-          {state.seats.map((seat) => (
-            <li key={seat.id} className={seat.alive ? "" : "out"}>
-              <i style={{ background: colorHex(seat.color) }} />
-              <span>{seat.name}</span>
-              {seat.id === state.activeSeat && state.phase !== "lobby" && state.phase !== "finished" ? (
-                <em>turn</em>
-              ) : null}
-              {!seat.alive ? <em>out</em> : null}
-            </li>
-          ))}
-        </ul>
-        <p className="meta">{cubeLabel(asBoardSize(state.size))}</p>
-        {state.phase === "playing" && <p className="meta">Pile {state.pileCount}</p>}
+        <div className="hud-facts">
+          <ul className="roster">
+            {state.seats.map((seat) => (
+              <li key={seat.id} className={seat.alive ? "" : "out"}>
+                <i style={{ background: colorHex(seat.color) }} />
+                <span>{seat.name}</span>
+                {seat.id === state.activeSeat && state.phase !== "lobby" && state.phase !== "finished" ? (
+                  <em>turn</em>
+                ) : null}
+                {!seat.alive ? <em>out</em> : null}
+              </li>
+            ))}
+          </ul>
+          <p className="meta">{cubeLabel(asBoardSize(state.size))}</p>
+          {state.phase === "playing" && <p className="meta">Pile {state.pileCount}</p>}
+        </div>
         {state.phase === "starts" && state.activeSeat === you && (
           <p className="meta">Click an open exit on the outside of the cube.</p>
         )}
         {state.phase === "starts" && state.activeSeat !== you && <p className="meta">Waiting for a start exit.</p>}
         {notice && <p className="meta">{notice}</p>}
-        {onLeave && (
-          <button type="button" className="text-button" onClick={onLeave}>
-            Leave
-          </button>
-        )}
       </header>
-      {youSeat?.alive && state.phase === "playing" && (
+      {showTray && (
         <section className="glass tray">
           <div className="pieces">
             {hand.map((piece, index) => (

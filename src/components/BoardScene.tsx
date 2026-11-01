@@ -62,11 +62,13 @@ function Tube({
   color,
   radius,
   glow = false,
+  opacity = 1,
 }: {
   points: Vec3[];
   color: string;
   radius: number;
   glow?: boolean;
+  opacity?: number;
 }) {
   const signature = points.map((point) => point.map((value) => value.toFixed(3)).join(",")).join("|");
   const geometry = useMemo(() => {
@@ -93,7 +95,12 @@ function Tube({
   }
   return (
     <mesh geometry={geometry}>
-      <meshBasicMaterial color={color} />
+      <meshBasicMaterial
+        color={color}
+        transparent={opacity < 1}
+        opacity={opacity}
+        depthWrite={opacity >= 1}
+      />
     </mesh>
   );
 }
@@ -102,10 +109,12 @@ function PieceModel({
   partner,
   rotation,
   ghost = false,
+  pathOpacity = 1,
 }: {
   partner: number[];
   rotation: number;
   ghost?: boolean;
+  pathOpacity?: number;
 }) {
   const quaternion = useMemo(() => quaternionFor(rotation), [rotation]);
   const curves = useMemo(() => pairCurves(partner), [partner]);
@@ -120,7 +129,13 @@ function PieceModel({
         <lineBasicMaterial color={ghost ? "#f7fbff" : "#d5dbe3"} transparent opacity={ghost ? 0.55 : 0.95} />
       </lineSegments>
       {curves.map((points, index) => (
-        <Tube key={index} points={points} color={ghost ? "#c5ccd6" : "#b7bec8"} radius={0.018} />
+        <Tube
+          key={index}
+          points={points}
+          color={ghost ? "#c5ccd6" : "#b7bec8"}
+          radius={0.018}
+          opacity={pathOpacity}
+        />
       ))}
     </group>
   );
@@ -296,7 +311,7 @@ function BoardContents({
         const center = cellCenter([x, y, z], size);
         return (
           <group key={key} position={center}>
-            <PieceModel partner={placed.partner} rotation={placed.rotation} />
+            <PieceModel partner={placed.partner} rotation={placed.rotation} pathOpacity={0.5} />
           </group>
         );
       })}
