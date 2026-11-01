@@ -37,10 +37,40 @@ const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const TOUCH_MS = 60 * 1000;
 
+const STORE_URLS = [
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+  "DATABASE_URL_UNPOOLED",
+  "POSTGRES_URL_NON_POOLING",
+] as const;
+
+// A direct process.env.DATABASE_URL read can be baked in as empty when the
+// project is built. The next server then keeps rooms in its own memory, so a
+// color click or a second device is told the room does not exist.
+function databaseUrl() {
+  const env = process.env;
+  for (const name of STORE_URLS) {
+    const value = env[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
 function database() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-  return neon(url);
+  const url = databaseUrl();
+  if (!url) {
+    if (process.env.NODE_ENV === "production") throw new Error("DATABASE_URL is not set.");
+    return null;
+  }
+  return neon(url, { fetchOptions: { cache: "no-store" } });
+}
+
+export function roomError(error: unknown) {
+  if (error instanceof Error && error.message === "DATABASE_URL is not set.") {
+    return "The room store is not configured.";
+  }
+  return "The room did not answer. Try that again.";
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -52,7 +82,12 @@ async function ensureSchema() {
       code TEXT PRIMARY KEY,
       version INTEGER NOT NULL,
       data JSONB NOT NULL
-    )`.then(() => undefined);
+    )`
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      schemaReady = null;
+      throw error;
+    });
   await schemaReady;
 }
 

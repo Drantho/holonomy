@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { act, readRoom } from "@/server/rooms";
+import { act, readRoom, roomError } from "@/server/rooms";
 
 function posted(body: unknown): Record<string, unknown> {
   if (typeof body === "string") {
@@ -15,6 +15,7 @@ function posted(body: unknown): Record<string, unknown> {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader("Cache-Control", "no-store");
   const code = String(req.query.code ?? "");
   try {
     if (req.method === "GET") {
@@ -36,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ error: "Use GET or POST." });
-  } catch {
-    return res.status(500).json({ error: "The room did not answer. Try that again." });
+  } catch (error) {
+    return res.status(500).json({ error: roomError(error) });
   }
 }

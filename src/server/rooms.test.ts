@@ -1,12 +1,25 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, ageRoom, createRoom, forgetSeen, joinRoom, readRoom, ROOM_TTL_MS } from "./rooms";
 
-const savedDatabaseUrl = process.env.DATABASE_URL;
-delete process.env.DATABASE_URL;
+const storeUrls = [
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+  "DATABASE_URL_UNPOOLED",
+  "POSTGRES_URL_NON_POOLING",
+] as const;
+const savedStoreUrls = storeUrls.map((name) => [name, process.env[name]] as const);
+for (const name of storeUrls) delete process.env[name];
+
+beforeEach(() => {
+  for (const name of storeUrls) delete process.env[name];
+});
 
 afterEach(() => {
-  if (savedDatabaseUrl === undefined) delete process.env.DATABASE_URL;
-  else process.env.DATABASE_URL = savedDatabaseUrl;
+  for (const [name, value] of savedStoreUrls) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 });
 
 describe("room presence", () => {
@@ -86,6 +99,17 @@ describe("room presence", () => {
     expect(room?.state.seats.map((seat) => seat.name)).toEqual(["Ada"]);
     const left = await act(created.code, created.token, "leave", { confirm: true });
     expect(left.ok).toBe(true);
+  });
+
+  it("refuses to create a room in production when no database is configured", async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      await expect(createRoom("Ada")).rejects.toThrow("DATABASE_URL is not set.");
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
   });
 
   it("drops a room only after it has been idle past the time limit", async () => {
