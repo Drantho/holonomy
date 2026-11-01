@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadSession, saveSession } from "./session";
+import { loadSession, savedSession, saveSession } from "./session";
 
 function memory() {
   const data = new Map<string, string>();
@@ -39,7 +39,7 @@ describe("seat session", () => {
     expect(local.getItem("pathcube:ROOM1")).toContain("ada");
   });
 
-  it("restores the seat when the saved tab is no longer visible", () => {
+  it("offers a saved seat to a new tab without sitting them in it", () => {
     vi.stubGlobal("localStorage", local);
     vi.stubGlobal("window", {});
     useTab();
@@ -49,6 +49,7 @@ describe("seat session", () => {
     local.setItem("pathcube:ROOM1:live", JSON.stringify(lock));
 
     useTab();
-    expect(loadSession("ROOM1")).toEqual({ token: "ada", seatId: 0 });
+    expect(loadSession("ROOM1")).toBeNull();
+    expect(savedSession("ROOM1")).toEqual({ token: "ada", seatId: 0 });
   });
 });

@@ -1,7 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { clearSession, holdSession, loadSession, saveSession, type SeatSession } from "@/client/session";
+import { clearSession, holdSession, loadSession, savedSession, saveSession, type SeatSession } from "@/client/session";
 import MatchTable from "@/components/MatchTable";
 import { COLORS, type Piece, type PublicState, type Stance } from "@/game";
 
@@ -33,6 +33,7 @@ export default function RoomPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [resume, setResume] = useState<{ token: string; seatId: number; name: string } | null>(null);
   const misses = useRef(0);
   const held = useRef(false);
 
@@ -41,6 +42,28 @@ export default function RoomPage() {
     setSession(loadSession(code));
     setReady(true);
   }, [code]);
+
+  useEffect(() => {
+    if (!code || session) {
+      setResume(null);
+      return;
+    }
+    const saved = savedSession(code);
+    if (!saved) return;
+    let cancel = false;
+    void (async () => {
+      const response = await fetch(`/api/rooms/${code}`, {
+        headers: { Authorization: `Bearer ${saved.token}` },
+      });
+      if (!response.ok) return;
+      const body = (await response.json()) as RoomPayload;
+      const seat = body.state.seats.find((entry) => entry.id === body.you && entry.alive);
+      if (!cancel && seat) setResume({ token: saved.token, seatId: saved.seatId, name: seat.name });
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [code, session]);
 
   const refresh = useCallback(async () => {
     if (!code) return;
@@ -115,44 +138,74 @@ export default function RoomPage() {
           body = null;
         }
         const message = body?.error ?? "";
+        if (action === "leave" && /does not exist|not in this room/.test(message)) break;
         const missed = !response || (!response.ok && /does not exist|did not answer|busy/.test(message));
         if (!missed) break;
         await new Promise((resolve) => window.setTimeout(resolve, 120 * (attempt + 1)));
       }
-      if (body?.state) {
+      const message = body?.error ?? "";
+      const alreadyOut = action === "leave" && /does not exist|not in this room/.test(message);
+      if (body?.state && !alreadyOut) {
         held.current = true;
         setPayload((current) => keepNewer(current, body as RoomPayload));
       }
-      if (!response || !response.ok) {
-        setError(body?.error ?? "The room did not answer. Try that again.");
-        return false;
+      if (alreadyOut || (response && response.ok)) {
+        setError("");
+        return true;
       }
-      setError("");
-      return true;
+      setError(message || "The room did not answer. Try that again.");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
+  function continueSeat() {
+    if (!resume) return;
+    const next = { token: resume.token, seatId: resume.seatId };
+    saveSession(code, next);
+    setSession(next);
+    setResume(null);
+    void refresh();
+  }
+
   async function join(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    const response = await fetch("/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join", code, name }),
-    });
-    const body = (await response.json()) as RoomPayload & { spectate?: boolean; token?: string; seatId?: number };
-    setBusy(false);
-    if (body.spectate || !response.ok) {
-      setError(body.error ?? "This match has already started.");
-      void refresh();
-      return;
+    try {
+      let response: Response | null = null;
+      let body: (RoomPayload & { spectate?: boolean }) | null = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          response = await fetch("/api/rooms", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "join", code, name }),
+          });
+          body = (await response.json()) as RoomPayload & { spectate?: boolean };
+        } catch {
+          response = null;
+          body = null;
+        }
+        const message = body?.error ?? "";
+        const missed = !response || (!response.ok && /does not exist|did not answer|busy/.test(message));
+        if (!missed) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 120 * (attempt + 1)));
+      }
+      if (!response || !response.ok || body?.spectate || !body?.token || body.seatId == null) {
+        setError(body?.error ?? "Could not join that room.");
+        void refresh();
+        return;
+      }
+      const next = { token: body.token, seatId: body.seatId };
+      saveSession(code, next);
+      setSession(next);
+      setResume(null);
+      setPayload(body);
+      setError("");
+    } finally {
+      setBusy(false);
     }
-    const next = { token: body.token as string, seatId: body.seatId as number };
-    saveSession(code, next);
-    setSession(next);
-    setPayload(body);
   }
 
   const state = payload?.state;
@@ -206,6 +259,11 @@ export default function RoomPage() {
         <form className="glass lobby-card" onSubmit={join}>
           <p className="eyebrow">Join {code}</p>
           <h2>Take a seat</h2>
+          {resume && (
+            <button type="button" onClick={continueSeat} disabled={busy}>
+              Continue as {resume.name}
+            </button>
+          )}
           <label>
             Name
             <input value={name} maxLength={16} onChange={(event) => setName(event.target.value)} />

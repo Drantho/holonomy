@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, ageRoom, createRoom, joinRoom, readRoom, ROOM_TTL_MS } from "./rooms";
+import { act, ageRoom, createRoom, forgetSeen, joinRoom, readRoom, ROOM_TTL_MS } from "./rooms";
 
 const savedDatabaseUrl = process.env.DATABASE_URL;
 delete process.env.DATABASE_URL;
@@ -75,6 +75,17 @@ describe("room presence", () => {
     const room = await readRoom(created.code, created.token);
     expect(room?.state.phase).toBe("finished");
     expect(room?.state.result).toEqual({ kind: "win", seatId: 0 });
+  });
+
+  it("keeps a room that has no activity stamp", async () => {
+    delete process.env.DATABASE_URL;
+    const created = await createRoom("Ada");
+    if (!created.ok) throw new Error("room was not created");
+    forgetSeen(created.code);
+    const room = await readRoom(created.code, created.token);
+    expect(room?.state.seats.map((seat) => seat.name)).toEqual(["Ada"]);
+    const left = await act(created.code, created.token, "leave", { confirm: true });
+    expect(left.ok).toBe(true);
   });
 
   it("drops a room only after it has been idle past the time limit", async () => {

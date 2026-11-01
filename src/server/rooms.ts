@@ -72,7 +72,9 @@ export function viewRoom(data: RoomData, token?: string | null): RoomView {
 }
 
 function expired(data: RoomData, now = Date.now()) {
-  return data.seen !== undefined && now - data.seen > ROOM_TTL_MS;
+  // A missing stamp is an older room, not an expired one. Only a real
+  // timestamp can make the room old enough to remove.
+  return typeof data.seen === "number" && now - data.seen > ROOM_TTL_MS;
 }
 
 async function read(code: string): Promise<RoomData | null> {
@@ -130,6 +132,12 @@ export function ageRoom(code: string, ageMs: number) {
   const data = memory.get(code.trim().toUpperCase());
   if (!data) return;
   data.seen = Date.now() - ageMs;
+}
+
+export function forgetSeen(code: string) {
+  const data = memory.get(code.trim().toUpperCase());
+  if (!data) return;
+  delete data.seen;
 }
 
 function makeCode(): string {

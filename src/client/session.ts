@@ -61,16 +61,15 @@ function hiddenNow() {
 
 export function loadSession(code: string): SeatSession | null {
   if (typeof window === "undefined") return null;
-  const tab = parse(sessionStorage.getItem(key(code)));
-  if (tab) return tab;
-  // iOS can drop sessionStorage when the browser is backgrounded. Restore the
-  // seat only when no other visible tab is already playing it.
-  if (otherTabIsHere(code)) return null;
-  const saved = parse(localStorage.getItem(key(code)));
-  if (!saved) return null;
-  sessionStorage.setItem(key(code), JSON.stringify(saved));
-  holdSession(code);
-  return saved;
+  // Only the tab that sat down is seated. A shared link must be able to join
+  // even when this browser already saved someone else's seat.
+  return parse(sessionStorage.getItem(key(code)));
+}
+
+export function savedSession(code: string): SeatSession | null {
+  if (typeof window === "undefined") return null;
+  if (parse(sessionStorage.getItem(key(code)))) return null;
+  return parse(localStorage.getItem(key(code)));
 }
 
 export function saveSession(code: string, session: SeatSession) {
