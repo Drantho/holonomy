@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, ageRoom, createRoom, joinRoom, readRoom, ROOM_TTL_MS, roomHeartbeats } from "./rooms";
+import { act, ageRoom, createRoom, joinRoom, readRoom, ROOM_TTL_MS } from "./rooms";
 
 const savedDatabaseUrl = process.env.DATABASE_URL;
 delete process.env.DATABASE_URL;
@@ -10,23 +10,28 @@ afterEach(() => {
 });
 
 describe("room presence", () => {
-  it("keeps both players' heartbeats when they arrive together", async () => {
+  it("lands a move while heartbeats are arriving", async () => {
     delete process.env.DATABASE_URL;
     const created = await createRoom("Ada");
     if (!created.ok) throw new Error("room was not created");
     const joined = await joinRoom(created.code, "Bea");
     if (!joined.ok) throw new Error(joined.error);
-    const started = Date.now();
-    for (let round = 0; round < 15; round += 1) {
-      const pair = await Promise.all([
-        act(created.code, created.token, "heartbeat", {}),
-        act(created.code, joined.token, "heartbeat", {}),
-      ]);
-      expect(pair.every((result) => result.ok)).toBe(true);
-    }
-    const beats = roomHeartbeats(created.code);
-    expect(beats?.["0"]).toBeGreaterThanOrEqual(started);
-    expect(beats?.["1"]).toBeGreaterThanOrEqual(started);
+    const before = joined.state.version;
+    const flood = Promise.all(
+      Array.from({ length: 20 }, () =>
+        Promise.all([
+          act(created.code, created.token, "heartbeat", {}),
+          act(created.code, joined.token, "heartbeat", {}),
+        ]),
+      ),
+    );
+    const colored = await act(created.code, created.token, "color", { color: "cyan" });
+    const beats = await flood;
+    expect(beats.flat().every((result) => result.ok)).toBe(true);
+    expect(colored.ok).toBe(true);
+    const room = await readRoom(created.code, created.token);
+    expect(room?.state.seats.find((seat) => seat.id === 0)?.color).toBe("cyan");
+    expect(room?.state.version).toBe(before + 1);
   });
 
   it("keeps the lock-in version still while heartbeats land", async () => {

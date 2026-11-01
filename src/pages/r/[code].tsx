@@ -60,9 +60,10 @@ export default function RoomPage() {
         return;
       }
       misses.current = 0;
+      const opened = !held.current;
       held.current = true;
       setPayload((current) => keepNewer(current, body));
-      setError("");
+      if (opened) setError("");
     } catch {
       misses.current += 1;
     }
@@ -77,35 +78,20 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!code || !session || payload?.state.phase === "finished") return;
-    // pagehide also fires when a phone switches to another app. That must not
-    // leave the room. A heartbeat holds the seat until the stale window expires.
-    const hold = () => {
-      holdSession(code);
-      const body = JSON.stringify({ action: "heartbeat", token: session.token });
-      try {
-        navigator.sendBeacon(`/api/rooms/${code}`, new Blob([body], { type: "application/json" }));
-      } catch {
-        // A beacon can throw when the page is already being discarded.
-      }
-      void fetch(`/api/rooms/${code}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        keepalive: true,
-      }).catch(() => undefined);
-    };
+    // Switching apps must not write the room. A background write races a click
+    // and the click is refused. Opening the page is what keeps the room alive.
+    const hold = () => holdSession(code);
+    hold();
     const beat = window.setInterval(hold, 4000);
     const onVisibility = () => {
       hold();
       if (document.visibilityState === "visible") void refresh();
     };
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", hold);
     window.addEventListener("pageshow", onVisibility);
     return () => {
       window.clearInterval(beat);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pagehide", hold);
       window.removeEventListener("pageshow", onVisibility);
     };
   }, [code, session, payload?.state.phase, refresh]);
@@ -114,31 +100,35 @@ export default function RoomPage() {
     if (!session) return false;
     setBusy(true);
     try {
-      const send = () =>
-        fetch(`/api/rooms/${code}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, token: session.token, ...extra }),
-        });
-      let response = await send();
-      let body = (await response.json()) as RoomPayload;
-      if (!response.ok && body.error?.includes("does not exist")) {
-        response = await send();
-        body = (await response.json()) as RoomPayload;
+      let response: Response | null = null;
+      let body: RoomPayload | null = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          response = await fetch(`/api/rooms/${code}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, token: session.token, ...extra }),
+          });
+          body = (await response.json()) as RoomPayload;
+        } catch {
+          response = null;
+          body = null;
+        }
+        const message = body?.error ?? "";
+        const missed = !response || (!response.ok && /does not exist|did not answer|busy/.test(message));
+        if (!missed) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 120 * (attempt + 1)));
       }
-      if (body.state) {
+      if (body?.state) {
         held.current = true;
-        setPayload((current) => keepNewer(current, body));
+        setPayload((current) => keepNewer(current, body as RoomPayload));
       }
-      if (!response.ok) {
-        setError(body.error ?? "That move was rejected.");
+      if (!response || !response.ok) {
+        setError(body?.error ?? "The room did not answer. Try that again.");
         return false;
       }
       setError("");
       return true;
-    } catch {
-      setError("The room did not answer. Try that again.");
-      return false;
     } finally {
       setBusy(false);
     }

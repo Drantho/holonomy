@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const token = String(body.token ?? "");
       const result = await act(code, token, String(body.action ?? ""), body);
       if (!result.ok) {
-        const status = result.error.includes("changed") ? 409 : 400;
+        const status = /changed|busy|does not exist/.test(result.error) ? 409 : 400;
         return res.status(status).json(result);
       }
       return res.status(200).json(result);

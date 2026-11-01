@@ -153,21 +153,41 @@ export async function readRoom(code: string, token?: string | null) {
     return null;
   }
   const seen = found.seen ?? 0;
-  if (Date.now() - seen < TOUCH_MS) return viewRoom(found, token);
-  const next = structuredClone(found);
-  next.seen = Date.now();
-  const saved = await write(normalized, next, found.revision ?? found.match.public.version);
-  return viewRoom(saved ? next : found, token);
+  if (Date.now() - seen >= TOUCH_MS) await touchSeen(normalized, found);
+  return viewRoom(found, token);
+}
+
+// Stamp activity without rewriting the game. A full-row write here races a move
+// and the move comes back as a missed room.
+async function touchSeen(code: string, data: RoomData) {
+  const seen = Date.now();
+  data.seen = seen;
+  const sql = database();
+  if (!sql) return;
+  try {
+    await sql`UPDATE path_rooms
+      SET data = jsonb_set(data, '{seen}', ${JSON.stringify(seen)}::jsonb, true)
+      WHERE code = ${code}`;
+  } catch {
+    // The open page still has the room. The next poll can stamp it.
+  }
 }
 
 async function commit(
   code: string,
   change: (data: RoomData) => { data: RoomData; empty?: boolean } | { error: string },
 ): Promise<{ data: RoomData; view: RoomView } | { error: string; view?: RoomView }> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  let missing = 0;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     const found = await read(code);
-    if (!found || expired(found)) {
-      if (found) await remove(code);
+    if (!found) {
+      missing += 1;
+      if (missing >= 2) return { error: "That room does not exist." };
+      continue;
+    }
+    missing = 0;
+    if (expired(found)) {
+      await remove(code);
       return { error: "That room does not exist." };
     }
     const before = found.revision ?? found.match.public.version;
@@ -177,7 +197,7 @@ async function commit(
     const saved = await write(code, result.data, before);
     if (saved) return { data: result.data, view: viewRoom(result.data) };
   }
-  return { error: "The board changed. Look again, then lock in." };
+  return { error: "The room is busy. Try that again." };
 }
 
 export async function createRoom(name: string, size = 6, tokenSeatView = true) {
@@ -232,14 +252,15 @@ export async function act(
 ) {
   const normalized = code.trim().toUpperCase();
   if (action === "heartbeat") {
-    const result = await commit(normalized, (data) => {
-      const seatId = authed(data, token);
-      if (seatId === null) return { error: "That seat is not in this room." };
-      data.heartbeats[String(seatId)] = Date.now();
-      return { data };
-    });
-    if ("error" in result) return { ok: false as const, error: result.error };
-    return { ok: true as const, ...viewRoom(result.data, token) };
+    // Older pages still send this on a timer. It must not rewrite the row,
+    // or a click lands on a stale copy and is told the room is gone.
+    const found = await read(normalized);
+    if (!found || expired(found)) {
+      if (found) await remove(normalized);
+      return { ok: false as const, error: "That room does not exist." };
+    }
+    if (authed(found, token) === null) return { ok: false as const, error: "That seat is not in this room." };
+    return { ok: true as const, ...viewRoom(found, token) };
   }
 
   const result = await commit(normalized, (data) => {
