@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Billboard, Text } from "@react-three/drei";
+import { Billboard, OrbitControls, Text } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import {
@@ -338,93 +338,6 @@ function StartMarkers({
   );
 }
 
-function FreeOrbit() {
-  const camera = useThree((state) => state.camera);
-  const gl = useThree((state) => state.gl);
-
-  useEffect(() => {
-    const element = gl.domElement;
-    const target = new THREE.Vector3();
-    const offset = new THREE.Vector3();
-    const up = new THREE.Vector3();
-    const right = new THREE.Vector3();
-    const minDistance = 5;
-    const maxDistance = 24;
-    let dragging = false;
-    let lastX = 0;
-    let lastY = 0;
-
-    const place = () => {
-      const distance = THREE.MathUtils.clamp(offset.length(), minDistance, maxDistance);
-      offset.setLength(distance);
-      camera.position.copy(target).add(offset);
-      camera.up.copy(up);
-      camera.lookAt(target);
-    };
-
-    const rotateBy = (dx: number, dy: number) => {
-      const height = element.clientHeight || 1;
-      const yaw = (2 * Math.PI * dx) / height;
-      const pitch = (2 * Math.PI * dy) / height;
-      offset.copy(camera.position).sub(target);
-      up.copy(camera.up).normalize();
-      if (yaw) offset.applyAxisAngle(up, -yaw);
-      right.crossVectors(up, offset);
-      if (right.lengthSq() < 1e-8) return;
-      right.normalize();
-      if (pitch) {
-        offset.applyAxisAngle(right, -pitch);
-        up.applyAxisAngle(right, -pitch).normalize();
-      }
-      place();
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      dragging = true;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      element.setPointerCapture(event.pointerId);
-    };
-    const onPointerMove = (event: PointerEvent) => {
-      if (!dragging) return;
-      const dx = event.clientX - lastX;
-      const dy = event.clientY - lastY;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      if (dx || dy) rotateBy(dx, dy);
-    };
-    const onPointerUp = (event: PointerEvent) => {
-      if (!dragging) return;
-      dragging = false;
-      if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
-    };
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      offset.copy(camera.position).sub(target);
-      const dolly = Math.pow(0.95, event.deltaY * 0.01);
-      offset.setLength(THREE.MathUtils.clamp(offset.length() / dolly, minDistance, maxDistance));
-      up.copy(camera.up);
-      place();
-    };
-
-    element.addEventListener("pointerdown", onPointerDown);
-    element.addEventListener("pointermove", onPointerMove);
-    element.addEventListener("pointerup", onPointerUp);
-    element.addEventListener("pointercancel", onPointerUp);
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      element.removeEventListener("pointerdown", onPointerDown);
-      element.removeEventListener("pointermove", onPointerMove);
-      element.removeEventListener("pointerup", onPointerUp);
-      element.removeEventListener("pointercancel", onPointerUp);
-      element.removeEventListener("wheel", onWheel);
-    };
-  }, [camera, gl]);
-
-  return null;
-}
-
 function BoardContents({
   state,
   you,
@@ -456,7 +369,7 @@ function BoardContents({
     <>
       <color attach="background" args={["#07080c"]} />
       <ambientLight intensity={0.6} />
-      <FreeOrbit />
+      <OrbitControls enableDamping makeDefault minDistance={5} maxDistance={24} />
       <Lattice size={size} />
       <Suspense fallback={null}>
         <Axes size={size} />
