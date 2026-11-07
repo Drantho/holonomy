@@ -170,8 +170,8 @@ export default function MatchTable({
       )}
       {state.phase === "finished" && (
         <section className="glass result">
-          <h2>{resultTitle(state)}</h2>
-          <a href="/">Back to the menu</a>
+          <p>{resultTitle(state)}</p>
+          <a href="/">Home</a>
         </section>
       )}
     </div>

@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { Billboard, Text } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import {
@@ -169,6 +169,57 @@ function worldPoints(segment: Segment, size: number): Vec3[] {
   ]);
 }
 
+const AXES = [
+  { label: "x", dir: [1, 0, 0] as Vec3, color: "#e07a6a" },
+  { label: "y", dir: [0, 1, 0] as Vec3, color: "#8fd19a" },
+  { label: "z", dir: [0, 0, 1] as Vec3, color: "#8eb4f0" },
+] as const;
+
+function Axes({ size }: { size: number }) {
+  const half = size / 2;
+  const length = 1.25;
+  const origin: Vec3 = [half + 1.35, -0.9, 0.15];
+  const rotations: Record<string, [number, number, number]> = {
+    x: [0, 0, -Math.PI / 2],
+    y: [0, 0, 0],
+    z: [Math.PI / 2, 0, 0],
+  };
+
+  return (
+    <group>
+      <mesh position={origin}>
+        <sphereGeometry args={[0.07, 14, 14]} />
+        <meshBasicMaterial color="#c5ceda" />
+      </mesh>
+      {AXES.map((axis) => {
+        const mid: Vec3 = [
+          origin[0] + axis.dir[0] * length * 0.5,
+          origin[1] + axis.dir[1] * length * 0.5,
+          origin[2] + axis.dir[2] * length * 0.5,
+        ];
+        const tip: Vec3 = [
+          origin[0] + axis.dir[0] * (length + 0.32),
+          origin[1] + axis.dir[1] * (length + 0.32),
+          origin[2] + axis.dir[2] * (length + 0.32),
+        ];
+        return (
+          <group key={axis.label}>
+            <mesh position={mid} rotation={rotations[axis.label]}>
+              <cylinderGeometry args={[0.035, 0.035, length, 8]} />
+              <meshBasicMaterial color={axis.color} />
+            </mesh>
+            <Billboard position={tip}>
+              <Text fontSize={0.46} color={axis.color} anchorX="center" anchorY="middle">
+                {axis.label}
+              </Text>
+            </Billboard>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 function Lattice({ size }: { size: number }) {
   const geometry = useMemo(() => {
     const positions: number[] = [];
@@ -287,6 +338,93 @@ function StartMarkers({
   );
 }
 
+function FreeOrbit() {
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+
+  useEffect(() => {
+    const element = gl.domElement;
+    const target = new THREE.Vector3();
+    const offset = new THREE.Vector3();
+    const up = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const minDistance = 5;
+    const maxDistance = 24;
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const place = () => {
+      const distance = THREE.MathUtils.clamp(offset.length(), minDistance, maxDistance);
+      offset.setLength(distance);
+      camera.position.copy(target).add(offset);
+      camera.up.copy(up);
+      camera.lookAt(target);
+    };
+
+    const rotateBy = (dx: number, dy: number) => {
+      const height = element.clientHeight || 1;
+      const yaw = (2 * Math.PI * dx) / height;
+      const pitch = (2 * Math.PI * dy) / height;
+      offset.copy(camera.position).sub(target);
+      up.copy(camera.up).normalize();
+      if (yaw) offset.applyAxisAngle(up, -yaw);
+      right.crossVectors(up, offset);
+      if (right.lengthSq() < 1e-8) return;
+      right.normalize();
+      if (pitch) {
+        offset.applyAxisAngle(right, -pitch);
+        up.applyAxisAngle(right, -pitch).normalize();
+      }
+      place();
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      dragging = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      element.setPointerCapture(event.pointerId);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragging) return;
+      const dx = event.clientX - lastX;
+      const dy = event.clientY - lastY;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      if (dx || dy) rotateBy(dx, dy);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+    };
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      offset.copy(camera.position).sub(target);
+      const dolly = Math.pow(0.95, event.deltaY * 0.01);
+      offset.setLength(THREE.MathUtils.clamp(offset.length() / dolly, minDistance, maxDistance));
+      up.copy(camera.up);
+      place();
+    };
+
+    element.addEventListener("pointerdown", onPointerDown);
+    element.addEventListener("pointermove", onPointerMove);
+    element.addEventListener("pointerup", onPointerUp);
+    element.addEventListener("pointercancel", onPointerUp);
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      element.removeEventListener("pointerdown", onPointerDown);
+      element.removeEventListener("pointermove", onPointerMove);
+      element.removeEventListener("pointerup", onPointerUp);
+      element.removeEventListener("pointercancel", onPointerUp);
+      element.removeEventListener("wheel", onWheel);
+    };
+  }, [camera, gl]);
+
+  return null;
+}
+
 function BoardContents({
   state,
   you,
@@ -318,8 +456,11 @@ function BoardContents({
     <>
       <color attach="background" args={["#07080c"]} />
       <ambientLight intensity={0.6} />
-      <OrbitControls enableDamping makeDefault minDistance={5} maxDistance={18} />
+      <FreeOrbit />
       <Lattice size={size} />
+      <Suspense fallback={null}>
+        <Axes size={size} />
+      </Suspense>
       <StartMarkers state={state} you={you} onClaim={onClaim} />
       {Object.entries(state.board).map(([key, placed]) => {
         const [x, y, z] = key.split(",").map(Number) as [number, number, number];
@@ -415,7 +556,7 @@ export default function BoardScene(props: {
     <Canvas
       className="board-canvas"
       style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh" }}
-      camera={{ position: [8.2, 6.4, 8.2], fov: 42 }}
+      camera={{ position: [10.4, 8.1, 10.4], fov: 42 }}
       dpr={[1, 1.75]}
       gl={{ antialias: true, alpha: false }}
     >

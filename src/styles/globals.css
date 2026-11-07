@@ -107,6 +107,7 @@ input {
 .actions,
 .swatches,
 .sizes,
+.mode,
 .turns,
 .pieces {
   display: flex;
@@ -118,6 +119,7 @@ input {
 .lock,
 .swatches button,
 .sizes button,
+.mode button,
 .piece,
 .turns button {
   border: 1px solid var(--line);
@@ -171,8 +173,24 @@ button:disabled {
 
 .swatches button.on,
 .sizes button.on,
+.mode button.on,
 .piece.on {
   border-color: rgba(255, 255, 255, 0.7);
+}
+
+.mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mode button {
+  text-align: center;
+}
+
+.mode-panel {
+  display: grid;
+  gap: 16px;
+  animation: arrive 220ms ease;
 }
 
 .swatches button.taken {
@@ -189,6 +207,24 @@ button:disabled {
   inset: 0;
   width: 100vw !important;
   height: 100vh !important;
+  animation: arrive 320ms ease;
+}
+
+.menu-card,
+.hud,
+.tray,
+.lobby-card,
+.opening {
+  animation: arrive 280ms ease;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .board-canvas canvas {
@@ -321,13 +357,19 @@ button:disabled {
 .result {
   position: fixed;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  padding: 28px;
-  display: grid;
-  gap: 12px;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
   z-index: 3;
-  text-align: center;
+}
+
+.result p {
+  margin: 0;
 }
 
 .lobby-card {
@@ -431,6 +473,15 @@ button:disabled {
     top: 5.5rem !important;
     bottom: auto !important;
     height: calc(100dvh - 18rem - env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .result {
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    transform: none;
+    justify-content: space-between;
   }
 
   .spectator {

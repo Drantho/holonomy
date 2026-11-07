@@ -225,7 +225,10 @@ export default function RoomPage() {
               <a href="/">Home</a>
             </div>
           ) : (
-            <p>Opening room…</p>
+            <div className="glass menu-card opening">
+              <p className="eyebrow">{code || "Holonomy"}</p>
+              <h1>Opening room</h1>
+            </div>
           )}
         </main>
       )}
